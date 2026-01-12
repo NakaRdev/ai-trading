@@ -1,0 +1,1 @@
+streamlit run .\trading_bot.py
