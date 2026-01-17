@@ -8,9 +8,9 @@ from datetime import datetime
 
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="Sniper Bot V19", page_icon="😴", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Sniper Bot V20", page_icon="📐", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. CSS ---
+# --- 2. CSS (FIXED HEIGHT FOR GRID) ---
 st.markdown("""
     <style>
     /* Globální reset */
@@ -49,22 +49,24 @@ st.markdown("""
     .ai-bar-bg { width: 100%; height: 6px; background-color: #222; border-radius: 3px; margin-top: 5px; overflow: hidden; }
     .ai-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease-in-out; }
 
-    /* === NOVÉ: SPÁNEK MODE === */
+    /* === SPÁNEK MODE (FIXED HEIGHT) === */
+    /* Toto zajistí, že zavřená karta je stejně vysoká jako otevřená */
     .sleep-overlay {
-        height: 250px;
+        height: 470px; /* Pevná výška odpovídající Live kartě */
         display: flex;
         flex-direction: column;
-        justify-content: center;
+        justify-content: center; /* Vycentruje obsah vertikálně */
         align-items: center;
-        background: rgba(20, 20, 20, 0.6); /* Poloprůhledné */
+        background: rgba(20, 20, 20, 0.6);
         border-radius: 10px;
         border: 1px dashed #333;
-        backdrop-filter: blur(4px); /* Efekt rozmazání pozadí */
+        backdrop-filter: blur(4px);
         margin-top: 20px;
+        box-sizing: border-box;
     }
-    .sleep-emoji { font-size: 60px; opacity: 0.8; animation: pulse 3s infinite; }
-    .sleep-text { font-size: 18px; font-weight: 900; color: #666; margin-top: 10px; text-transform: uppercase; letter-spacing: 2px; }
-    .header-dimmed { opacity: 0.3; filter: grayscale(100%); transition: opacity 0.5s; }
+    .sleep-emoji { font-size: 80px; opacity: 0.8; animation: pulse 3s infinite; margin-bottom: 20px; }
+    .sleep-text { font-size: 24px; font-weight: 900; color: #444; text-transform: uppercase; letter-spacing: 4px; }
+    .header-dimmed { opacity: 0.4; filter: grayscale(100%); transition: opacity 0.5s; }
     
     @keyframes pulse {
         0% { transform: scale(1); opacity: 0.8; }
@@ -216,7 +218,7 @@ def create_chart(df, color):
     return fig
 
 # --- 7. MAIN APP ---
-st.title("💸 SNIPER V19 (WEEKEND MODE)")
+st.title("💸 SNIPER V20 (PERFECT GRID)")
 placeholder = st.empty()
 
 while True:
@@ -263,7 +265,7 @@ while True:
                                 </div>
                             """, unsafe_allow_html=True)
                             
-                            # 2. SPACÍ PŘEKRYV (Místo Grafu a Tlačítek)
+                            # 2. SPACÍ PŘEKRYV (FIXNÍ VÝŠKA 470px = Vyplní celý frame)
                             st.markdown(f"""
                                 <div class="sleep-overlay">
                                     <div class="sleep-emoji">😴</div>
