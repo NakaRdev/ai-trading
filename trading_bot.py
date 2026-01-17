@@ -8,9 +8,9 @@ from datetime import datetime
 
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="Sniper Bot V13", page_icon="🤖", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Sniper Bot V14", page_icon="🧠", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. CSS (FIXED LAYOUT & AI BAR) ---
+# --- 2. CSS (FIXED MARGINS & LAYOUT) ---
 st.markdown("""
     <style>
     /* Globální reset */
@@ -47,7 +47,7 @@ st.markdown("""
         letter-spacing: 1px;
     }
     
-    /* === RISK MANAGEMENT (FIX: BOX-SIZING) === */
+    /* === RISK MANAGEMENT === */
     .risk-wrapper {
         display: flex;
         justify-content: space-between;
@@ -56,8 +56,6 @@ st.markdown("""
         border-radius: 8px;
         padding: 15px;
         margin-top: 15px;
-        
-        /* TOTO OPRAVUJE VYLÉZÁNÍ Z RÁMEČKU: */
         width: 100%; 
         box-sizing: border-box !important; 
     }
@@ -69,12 +67,14 @@ st.markdown("""
     .sl-text { color: #ff4444; text-shadow: 0 0 10px rgba(255, 68, 68, 0.2); }
     .tp-text { color: #00e676; text-shadow: 0 0 10px rgba(0, 230, 118, 0.2); }
     
-    /* === AI ACCURACY (NOVÉ) === */
+    /* === AI ACCURACY (FIXED MARGIN) === */
     .ai-container {
         margin-top: 15px;
         text-align: center;
         padding-top: 10px;
+        padding-bottom: 10px; /* Přidáno místo dole */
         border-top: 1px solid #222;
+        margin-bottom: 5px; /* Extra odsazení od okraje karty */
     }
     
     .ai-label {
@@ -92,7 +92,6 @@ st.markdown("""
         color: #fff;
     }
     
-    /* Progress Bar Pozadí */
     .ai-bar-bg {
         width: 100%;
         height: 6px;
@@ -102,14 +101,12 @@ st.markdown("""
         overflow: hidden;
     }
     
-    /* Progress Bar Výplň */
     .ai-bar-fill {
         height: 100%;
         border-radius: 3px;
         transition: width 1s ease-in-out;
     }
 
-    /* Skrytí elementů */
     header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
@@ -119,7 +116,7 @@ def hex_to_rgba(hex_color, alpha=0.2):
     hex_color = hex_color.lstrip('#')
     return f"rgba({int(hex_color[0:2], 16)}, {int(hex_color[2:4], 16)}, {int(hex_color[4:6], 16)}, {alpha})"
 
-# --- 4. DATA ENGINE ---
+# --- 4. DATA ENGINE (S MACD) ---
 @st.cache_data(ttl=30, show_spinner=False)
 def get_data(symbol):
     try:
@@ -131,22 +128,29 @@ def get_data(symbol):
         if df.index.tzinfo is None: df.index = df.index.tz_localize('UTC')
         df.index = df.index.tz_convert('Europe/Prague')
 
-        # Změna ceny
         lookback = 96 if len(df) > 96 else len(df) - 1
         open_price_24h = df['Close'].iloc[-lookback]
         current_price = df['Close'].iloc[-1]
         pct_change = ((current_price - open_price_24h) / open_price_24h) * 100
         df['Pct_Change'] = pct_change
 
-        # Indikátory
+        # EMA 200 (Trend)
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
+        # MACD (Novinka - Hybnost)
+        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+        df['MACD'] = exp1 - exp2
+        df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+        
+        # RSI
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
         rs = gain / loss
         df['RSI'] = 100 - (100 / (1 + rs))
 
+        # Bollinger Bands
         df['SMA_20'] = df['Close'].rolling(20).mean()
         df['STD_20'] = df['Close'].rolling(20).std()
         df['BB_Upper'] = df['SMA_20'] + (df['STD_20'] * 2)
@@ -158,7 +162,7 @@ def get_data(symbol):
     except:
         return None
 
-# --- 5. LOGIKA ANALÝZY ---
+# --- 5. LOGIKA ANALÝZY (CHYTŘEJŠÍ) ---
 def analyze_market(df):
     row = df.iloc[-1]
     price = row['Close']
@@ -170,22 +174,38 @@ def analyze_market(df):
     is_live = diff < 120 or now.weekday() >= 5 
 
     score = 50
+    
+    # 1. TREND (EMA 200)
     trend_up = price > row['EMA_200']
-    score += 10 if trend_up else -10
+    if trend_up: score += 10
+    else: score -= 10
 
+    # 2. RSI INTELIGENCE (Ochrana proti pozdním vstupům)
+    rsi = row['RSI']
+    
     if trend_up:
-        if row['RSI'] < 45: score += 15
-        if price <= row['BB_Lower']: score += 20
+        if rsi < 45: score += 15     # Pullback v trendu (Dobré)
+        elif rsi > 70: score -= 10   # Moc vysoko (Nebezpečné koupit)
     else:
-        if row['RSI'] > 55: score -= 15
-        if price >= row['BB_Upper']: score -= 20
+        if rsi > 55: score -= 15     # Odraz dolů (Dobré)
+        elif rsi < 30: score += 15   # !!! Moc nízko - Pozor na prodej (Nebezpečné prodat)
+
+    # 3. BOLLINGER BANDS (Odrazy)
+    if price <= row['BB_Lower']: score += 20  # Cena je levná
+    if price >= row['BB_Upper']: score -= 20  # Cena je drahá
+    
+    # 4. MACD (Potvrzení hybnosti)
+    # Pokud MACD roste nad Signálem, podporuje to růst
+    if row['MACD'] > row['Signal_Line']: score += 5
+    else: score -= 5
 
     score = max(0, min(100, score))
 
-    if score >= 60: 
+    # Rozhodování (Zpřísněné limity)
+    if score >= 65: # Zvýšeno z 60 na 65 pro méně falešných signálů
         action = "LONG / KOUPIT 🚀"
         color = "#00e676" 
-    elif score <= 40: 
+    elif score <= 35: # Sníženo ze 40 na 35
         action = "SHORT / PRODAT 📉"
         color = "#ff4444" 
     else: 
@@ -197,7 +217,7 @@ def analyze_market(df):
 
     return score, action, color, sl, tp, is_live
 
-# --- 6. GRAF (ZOOM FIX) ---
+# --- 6. GRAF ---
 def create_chart(df, color):
     subset = df.tail(50)
     
@@ -208,7 +228,6 @@ def create_chart(df, color):
 
     fig = go.Figure()
 
-    # Linka
     fig.add_trace(go.Scatter(
         x=subset.index, y=subset['Close'],
         mode='lines',
@@ -217,7 +236,6 @@ def create_chart(df, color):
         fillcolor=hex_to_rgba(color, 0.15),
     ))
 
-    # BB
     fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Upper'], line=dict(color='rgba(255,255,255,0.05)', width=1), hoverinfo='skip'))
     fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Lower'], line=dict(color='rgba(255,255,255,0.05)', width=1), hoverinfo='skip'))
 
@@ -234,7 +252,7 @@ def create_chart(df, color):
     return fig
 
 # --- 7. MAIN APP ---
-st.title("🤖 SNIPER TRADING V13")
+st.title("🧠 SNIPER TRADING V14")
 placeholder = st.empty()
 
 while True:
@@ -264,7 +282,7 @@ while True:
                         arrow = "▲" if pct_change >= 0 else "▼"
                         change_str = f"{arrow} {abs(pct_change):.2f}%"
 
-                        # 1. HLAVIČKA
+                        # HLAVIČKA
                         st.markdown(f"""
                             <div class="header-flex">
                                 <div>
@@ -278,20 +296,20 @@ while True:
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # 2. SIGNÁL
+                        # SIGNÁL
                         st.markdown(f"""
                             <div class="signal-box" style="background-color: {color}; box-shadow: 0 0 25px {hex_to_rgba(color, 0.4)};">
                                 {action}
                             </div>
                         """, unsafe_allow_html=True)
 
-                        # 3. GRAF
+                        # GRAF
                         chart_key = f"chart_{asset['sym']}_{int(time.time())}"
                         fig = create_chart(df, color)
                         st.plotly_chart(fig, config={'displayModeBar': False}, key=chart_key, use_container_width=True)
 
-                        # 4. RISK MANAGEMENT (FIXNÍ)
-                        if is_live and score != 50:
+                        # RISK MANAGEMENT
+                        if is_live and score != 50 and "WAIT" not in action:
                             st.markdown(f"""
                                 <div class="risk-wrapper">
                                     <div class="risk-col">
@@ -305,7 +323,7 @@ while True:
                                 </div>
                             """, unsafe_allow_html=True)
                             
-                            # 5. AI ACCURACY (NOVÉ - Pod SL/TP)
+                            # AI ACCURACY (S odsazením)
                             st.markdown(f"""
                                 <div class="ai-container">
                                     <div class="ai-label">🤖 AI PŘESNOST</div>
@@ -317,7 +335,8 @@ while True:
                             """, unsafe_allow_html=True)
 
                         else:
-                             st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+                             # Spacer pro zarovnání, když není signál
+                             st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
 
                     else:
                         st.warning(f"Načítám {asset['name']}...")
