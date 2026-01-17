@@ -9,10 +9,10 @@ from datetime import datetime
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
 st.set_page_config(
-    page_title="Sniper Bot V26", 
-    page_icon="💸", 
+    page_title="Sniper Bot V27", 
+    page_icon="👻", 
     layout="wide", 
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed" # Startujeme se zavřeným, aby vynikl overlay
 )
 
 # --- 2. SESSION STATE ---
@@ -21,60 +21,52 @@ if 'view' not in st.session_state:
 if 'selected_asset' not in st.session_state:
     st.session_state.selected_asset = 'BTC-USD'
 
-# --- 3. CSS (CLEAN DETAIL & PRO SIDEBAR) ---
+# --- 3. CSS (TRUE OVERLAY HACK) ---
 st.markdown("""
     <style>
     /* Globální */
     .stApp { background-color: #050505; font-family: 'Helvetica Neue', sans-serif; }
-    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
     
-    /* === SIDEBAR STYLING === */
-    [data-testid="stSidebar"] { 
-        background-color: #080808; 
-        border-right: 1px solid #222; 
+    /* === 1. OVERLAY SIDEBAR LOGIKA === */
+    /* Vytrhneme sidebar z layoutu a dáme ho 'nad' všechno */
+    section[data-testid="stSidebar"] {
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 320px !important; /* Širší menu */
+        z-index: 10000; /* Nejvyšší vrstva */
+        background-color: rgba(5, 5, 5, 0.95); /* Téměř neprůhledná černá */
+        border-right: 1px solid #333;
+        box-shadow: 10px 0 30px rgba(0,0,0,0.8);
+        transition: transform 0.3s ease;
     }
-    
-    .sidebar-logo {
-        text-align: center;
-        font-size: 24px;
-        font-weight: 900;
-        color: #fff;
-        margin-bottom: 20px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        border-bottom: 1px solid #222;
-        padding-bottom: 20px;
+
+    /* Zabráníme Streamlitu, aby posouval hlavní obsah doprava */
+    .main .block-container {
+        padding-left: 5rem !important; /* Pevná mezera zleva */
+        padding-right: 5rem !important;
+        max-width: 100% !important;
     }
-    .sidebar-category {
-        font-size: 11px;
-        font-weight: bold;
-        color: #666;
-        margin-top: 15px;
-        margin-bottom: 5px;
-        padding-left: 5px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
+
+    /* === 2. FIX OVLÁDACÍHO TLAČÍTKA (X / >) === */
+    /* Musíme zajistit, že křížek pro zavření je vidět */
+    button[kind="header"] {
+        z-index: 100001 !important; /* Ještě výš než sidebar */
+        color: #fff !important;
+        background: transparent;
     }
-    
-    /* Vylepšená tlačítka v Sidebaru */
-    .stButton button { 
-        width: 100%; 
-        border-radius: 4px; 
-        font-weight: 600; 
-        border: none; 
-        background: #111; 
-        color: #aaa; 
-        text-align: left;
-        padding-left: 15px;
-        transition: 0.2s;
+    /* Upravíme pozici tlačítka pro otevření, když je menu skryté */
+    [data-testid="collapsedControl"] {
+        left: 10px !important;
+        top: 10px !important;
+        background-color: #111 !important;
+        border: 1px solid #333 !important;
+        border-radius: 5px !important;
     }
-    .stButton button:hover { 
-        background: #1a1a1a; 
-        color: #fff; 
-        border-left: 3px solid #00e676;
-    }
-    
-    /* === DASHBOARD STYLES === */
+
+    /* === 3. STYLOVÁNÍ OBSAHU === */
+    /* Dashboard Cards */
     .header-flex { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
     .symbol-title { font-size: 28px; font-weight: 900; color: #fff; line-height: 1; }
     .symbol-desc { font-size: 14px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
@@ -97,34 +89,11 @@ st.markdown("""
     .ai-bar-bg { width: 100%; height: 6px; background-color: #222; border-radius: 3px; margin-top: 5px; overflow: hidden; }
     .ai-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease-in-out; }
 
-    /* === DETAIL PAGE (CLEAN LOOK) === */
-    /* Žádné rámečky, jen čistá data */
-    .metric-clean {
-        text-align: center;
-        padding: 10px;
-    }
-    .metric-label-clean {
-        color: #555;
-        font-size: 12px;
-        font-weight: 900;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        margin-bottom: 5px;
-    }
-    .metric-val-clean {
-        color: #fff;
-        font-size: 36px;
-        font-weight: 900;
-        font-family: monospace;
-    }
-    
-    /* Oddělovač v detailu */
-    .divider-clean {
-        height: 1px;
-        background-color: #222;
-        margin: 20px 0;
-        width: 100%;
-    }
+    /* Detail Clean Metrics */
+    .metric-clean { text-align: center; padding: 10px; }
+    .metric-label-clean { color: #555; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
+    .metric-val-clean { color: #fff; font-size: 36px; font-weight: 900; font-family: monospace; }
+    .divider-clean { height: 1px; background-color: #222; margin: 20px 0; width: 100%; }
 
     /* Sleep Mode */
     .sleep-overlay {
@@ -135,10 +104,19 @@ st.markdown("""
     .sleep-emoji { font-size: 80px; opacity: 0.8; animation: pulse 3s infinite; margin-bottom: 20px; }
     .sleep-text { font-size: 24px; font-weight: 900; color: #444; text-transform: uppercase; letter-spacing: 4px; }
     .header-dimmed { opacity: 0.4; filter: grayscale(100%); transition: opacity 0.5s; }
-    
     @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 0.5; } 100% { transform: scale(1); opacity: 0.8; } }
     
-    header[data-testid="stHeader"] { background-color: transparent; }
+    /* Sidebar Tlačítka */
+    .stButton button { width: 100%; border-radius: 4px; font-weight: 600; border: none; background: #151515; color: #aaa; text-align: left; padding: 15px; margin-bottom: 5px; transition: 0.2s; }
+    .stButton button:hover { background: #222; color: #fff; border-left: 4px solid #00e676; padding-left: 11px; }
+    
+    /* Sidebar Logo */
+    .sidebar-logo { font-size: 20px; font-weight: 900; color: #fff; text-align: center; padding: 20px 0; border-bottom: 1px solid #222; margin-bottom: 20px; letter-spacing: 3px; }
+    .sidebar-cat { font-size: 10px; font-weight: 900; color: #444; margin: 15px 0 5px 10px; text-transform: uppercase; }
+    
+    header[data-testid="stHeader"] { background-color: transparent; pointer-events: none; }
+    /* Povolit klikání na hamburger menu i když je header průhledný */
+    [data-testid="collapsedControl"] { pointer-events: auto; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -251,7 +229,6 @@ def create_gauge(score, color):
 
 # --- 8. MAIN UI LOGIC ---
 
-# Definice aktiv a kategorií
 assets_forex = [
     {"sym": "EURUSD=X", "name": "EUR / USD", "desc": "Forex"},
     {"sym": "GBPUSD=X", "name": "GBP / USD", "desc": "Forex"},
@@ -264,42 +241,36 @@ assets_comm = [
 assets_crypto = [
     {"sym": "BTC-USD", "name": "BITCOIN", "desc": "Krypto"},
 ]
-
 all_assets = assets_forex + assets_comm + assets_crypto
 
-# --- SIDEBAR (DESIGN UPGRADE) ---
+# --- OVERLAY SIDEBAR ---
 with st.sidebar:
-    st.markdown('<div class="sidebar-logo">🔫 SNIPER BOT</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-logo">SNIPER BOT</div>', unsafe_allow_html=True)
     
     def set_view(v, s=None):
         st.session_state.view = v
         if s: st.session_state.selected_asset = s
 
-    if st.button("🏠 DASHBOARD", key="nav_dash"):
+    if st.button("🏠 DASHBOARD (PŘEHLED)", key="nav_home"):
         set_view('dashboard')
     
-    st.markdown("---")
-    
-    # Kategorie FOREX
-    st.markdown('<div class="sidebar-category">FOREX</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-cat">FOREX TRHY</div>', unsafe_allow_html=True)
     for asset in assets_forex:
         if st.button(f"{asset['name']}", key=f"nav_{asset['sym']}"):
             set_view('detail', asset['sym'])
 
-    # Kategorie CRYPTO
-    st.markdown('<div class="sidebar-category">KRYPTO</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-cat">KRYPTOMĚNY</div>', unsafe_allow_html=True)
     for asset in assets_crypto:
         if st.button(f"{asset['name']}", key=f"nav_{asset['sym']}"):
             set_view('detail', asset['sym'])
 
-    # Kategorie FUTURES
-    st.markdown('<div class="sidebar-category">FUTURES & KOMODITY</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-cat">KOMODITY & INDEXY</div>', unsafe_allow_html=True)
     for asset in assets_comm:
         if st.button(f"{asset['name']}", key=f"nav_{asset['sym']}"):
             set_view('detail', asset['sym'])
 
     st.markdown("---")
-    st.caption("V26 Stable")
+    st.caption("Status: V27 Stable")
 
 # --- HLAVNÍ OBSAH ---
 placeholder = st.empty()
@@ -363,7 +334,7 @@ while True:
                         else:
                             st.warning(f"Načítám {asset['name']}...")
 
-        # === DETAIL (CLEAN DESIGN) ===
+        # === DETAIL (CLEAN) ===
         elif st.session_state.view == 'detail':
             sym = st.session_state.selected_asset
             asset_info = next((a for a in all_assets if a['sym'] == sym), None)
@@ -371,7 +342,6 @@ while True:
             if asset_info:
                 st.title(f"🔎 DETAIL: {asset_info['name']}")
                 
-                # OPRAVA: Unikátní key pro tlačítko "Zpět" s časem, aby se nehádalo
                 timestamp = int(time.time())
                 if st.button("⬅️ ZPĚT NA PŘEHLED", key=f"back_btn_{timestamp}"):
                     set_view('dashboard')
@@ -404,8 +374,7 @@ while True:
                         fig = create_chart_detail(df, color)
                         st.plotly_chart(fig, use_container_width=True)
                         
-                        # --- CLEAN METRICS SECTION (BEZ RÁMEČKŮ) ---
-                        st.markdown("<br>", unsafe_allow_html=True) # Mezera
+                        st.markdown("<br>", unsafe_allow_html=True)
                         c_metrics, c_risk, c_gauge = st.columns(3)
                         
                         with c_metrics:
@@ -426,7 +395,6 @@ while True:
                             st.markdown('</div>', unsafe_allow_html=True)
 
                         with c_gauge:
-                            # Gauge necháme s jeho vlastním layoutem, ale vycentrovaný
                             fig_g = create_gauge(score, color)
                             st.plotly_chart(fig_g, use_container_width=True, config={'displayModeBar': False})
 
