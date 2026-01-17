@@ -8,52 +8,68 @@ from datetime import datetime
 
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="Sniper Bot V11", page_icon="💀", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Sniper Bot V12", page_icon="💣", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. CSS (Design) ---
+# --- 2. CSS (Větší fonty, lepší layout) ---
 st.markdown("""
     <style>
     /* Globální reset */
-    .stApp { background-color: #000000; font-family: 'Helvetica Neue', sans-serif; }
+    .stApp { background-color: #050505; font-family: 'Helvetica Neue', sans-serif; }
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
     
-    /* Vypnutí mezer */
-    .block-container { padding-top: 2rem; }
-    
-    /* Texty uvnitř karty */
-    .symbol-title { font-size: 20px; font-weight: 900; color: #fff; margin: 0; }
-    .symbol-desc { font-size: 12px; color: #888; text-transform: uppercase; margin-bottom: 5px; }
-    .price-main { font-size: 32px; font-weight: 700; color: #fff; font-family: monospace; }
-    
-    /* Signál Badge */
-    .signal-box {
-        text-align: center;
-        padding: 8px;
-        border-radius: 4px;
-        font-weight: 900;
-        font-size: 16px;
-        text-transform: uppercase;
-        margin-top: 10px;
-        margin-bottom: 10px;
-        color: #000;
-    }
-    
-    /* Risk Management Grid */
-    .risk-container {
+    /* === HLAVIČKA KARTY === */
+    .header-flex {
         display: flex;
         justify-content: space-between;
-        background-color: #1a1a1a;
-        padding: 8px 12px;
-        border-radius: 6px;
-        margin-top: 10px;
-        font-family: monospace;
+        align-items: flex-start;
+        margin-bottom: 10px;
     }
-    .risk-label { font-size: 10px; color: #666; font-weight: bold; display: block; }
-    .risk-val { font-size: 16px; font-weight: bold; }
     
-    .sl-text { color: #ff4444; }
-    .tp-text { color: #00e676; }
+    /* Levá strana: Název */
+    .symbol-title { font-size: 28px; font-weight: 900; color: #fff; line-height: 1; }
+    .symbol-desc { font-size: 14px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
     
-    /* Skrytí defaultních elementů */
+    /* Pravá strana: Cena a Změna */
+    .price-box { text-align: right; }
+    .price-main { font-size: 38px; font-weight: 700; color: #fff; font-family: monospace; line-height: 1; text-shadow: 0 0 10px rgba(255,255,255,0.1); }
+    .price-change { font-size: 16px; font-weight: bold; margin-top: 5px; }
+    .change-up { color: #00e676; }
+    .change-down { color: #ff4444; }
+    
+    /* === SIGNÁL === */
+    .signal-box {
+        text-align: center;
+        padding: 15px;
+        border-radius: 8px;
+        font-weight: 900;
+        font-size: 20px; /* Větší font */
+        text-transform: uppercase;
+        margin: 15px 0;
+        color: #000;
+        letter-spacing: 1px;
+    }
+    
+    /* === RISK MANAGEMENT (Oprava vylézání) === */
+    .risk-wrapper {
+        display: flex;
+        justify-content: space-between;
+        background-color: #151515;
+        border: 1px solid #333;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 15px;
+        width: 100%; /* Aby nevylézal */
+        box-sizing: border-box; /* Započítat padding do šířky */
+    }
+    
+    .risk-col { display: flex; flex-direction: column; }
+    .risk-label { font-size: 12px; color: #666; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+    .risk-val { font-size: 20px; font-weight: bold; font-family: monospace; } /* Větší čísla */
+    
+    .sl-text { color: #ff4444; text-shadow: 0 0 10px rgba(255, 68, 68, 0.2); }
+    .tp-text { color: #00e676; text-shadow: 0 0 10px rgba(0, 230, 118, 0.2); }
+    
+    /* Skrytí elementů */
     header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
@@ -75,23 +91,28 @@ def get_data(symbol):
         if df.index.tzinfo is None: df.index = df.index.tz_localize('UTC')
         df.index = df.index.tz_convert('Europe/Prague')
 
+        # Výpočet změny za posledních 24h (cca 96 svíček po 15min)
+        # Pokud není dost dat, vezmeme začátek datasetu
+        lookback = 96 if len(df) > 96 else len(df) - 1
+        open_price_24h = df['Close'].iloc[-lookback]
+        current_price = df['Close'].iloc[-1]
+        pct_change = ((current_price - open_price_24h) / open_price_24h) * 100
+        df['Pct_Change'] = pct_change # Uložíme do DF pro pozdější použití
+
         # Indikátory
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
-        # RSI
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
         rs = gain / loss
         df['RSI'] = 100 - (100 / (1 + rs))
 
-        # BB
         df['SMA_20'] = df['Close'].rolling(20).mean()
         df['STD_20'] = df['Close'].rolling(20).std()
         df['BB_Upper'] = df['SMA_20'] + (df['STD_20'] * 2)
         df['BB_Lower'] = df['SMA_20'] - (df['STD_20'] * 2)
 
-        # ATR
         df['ATR'] = (df['High'] - df['Low']).rolling(14).mean()
 
         return df
@@ -137,19 +158,25 @@ def analyze_market(df):
 
     return score, action, color, sl, tp, is_live
 
-# --- 6. GRAF (PLOTLY) ---
+# --- 6. GRAF (ZOOM FIX) ---
 def create_chart(df, color):
-    subset = df.tail(60) # Ukážeme více dat
+    subset = df.tail(50) # Posledních 50 svíček
     
+    # === FIX: Výpočet rozsahu osy Y pro Zoom ===
+    y_min = subset['Close'].min()
+    y_max = subset['Close'].max()
+    padding = (y_max - y_min) * 0.1 # 10% odsazení
+    if padding == 0: padding = y_max * 0.01 # Ochrana proti nulovému rozsahu
+
     fig = go.Figure()
 
     # Linka
     fig.add_trace(go.Scatter(
         x=subset.index, y=subset['Close'],
         mode='lines',
-        line=dict(color=color, width=2),
-        fill='tozeroy',
-        fillcolor=hex_to_rgba(color, 0.1),
+        line=dict(color=color, width=3),
+        fill='tozeroy', 
+        fillcolor=hex_to_rgba(color, 0.15),
     ))
 
     # Bollinger Bands
@@ -157,24 +184,28 @@ def create_chart(df, color):
     fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Lower'], line=dict(color='rgba(255,255,255,0.05)', width=1), hoverinfo='skip'))
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=5, b=5), # Minimální okraje
-        height=150, # Výška grafu uvnitř karty
+        margin=dict(l=0, r=0, t=10, b=10),
+        height=200, # Vyšší graf
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         xaxis=dict(showgrid=False, showticklabels=False, fixedrange=True),
-        yaxis=dict(showgrid=False, showticklabels=False, fixedrange=True),
+        yaxis=dict(
+            showgrid=False, 
+            showticklabels=False, 
+            fixedrange=True,
+            range=[y_min - padding, y_max + padding] # === TOTO OPRAVUJE "ROVNÉ" GRAFY ===
+        ),
         showlegend=False,
         hovermode="x unified"
     )
     return fig
 
 # --- 7. MAIN APP ---
-st.title("🎯 SNIPER TRADING V11")
+st.title("💣 SNIPER TRADING V12")
 placeholder = st.empty()
 
 while True:
     with placeholder.container():
-        # Použijeme 2 sloupce pro lepší přehlednost
         cols = st.columns(2)
         
         assets = [
@@ -188,51 +219,63 @@ while True:
 
         for i, asset in enumerate(assets):
             with cols[i % 2]: 
-                # !!! TADY JE TA MAGIE - NATIVNÍ RÁMEČEK (BORDER=TRUE) !!!
                 with st.container(border=True):
                     df = get_data(asset['sym'])
                     
                     if df is not None:
                         score, action, color, sl, tp, is_live = analyze_market(df)
                         price = df.iloc[-1]['Close']
+                        pct_change = df.iloc[-1]['Pct_Change']
+                        
+                        # Určení barvy změny a šipky
+                        change_class = "change-up" if pct_change >= 0 else "change-down"
+                        arrow = "▲" if pct_change >= 0 else "▼"
+                        change_str = f"{arrow} {abs(pct_change):.2f}%"
 
-                        # 1. ČÁST: HLAVIČKA A CENA
+                        # 1. HLAVIČKA + INFO VPRAVO NAHOŘE
                         st.markdown(f"""
-                            <div>
-                                <div class="symbol-title">{asset['name']}</div>
-                                <div class="symbol-desc">{asset['desc']}</div>
-                                <div class="price-main">{price:.2f}</div>
+                            <div class="header-flex">
+                                <div>
+                                    <div class="symbol-title">{asset['name']}</div>
+                                    <div class="symbol-desc">{asset['desc']}</div>
+                                </div>
+                                <div class="price-box">
+                                    <div class="price-main">{price:.2f}</div>
+                                    <div class="price-change {change_class}">{change_str}</div>
+                                </div>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # 2. ČÁST: SIGNÁL BUTTON
+                        # 2. SIGNÁL BUTTON
                         st.markdown(f"""
-                            <div class="signal-box" style="background-color: {color}; box-shadow: 0 0 15px {hex_to_rgba(color, 0.4)};">
+                            <div class="signal-box" style="background-color: {color}; box-shadow: 0 0 25px {hex_to_rgba(color, 0.4)};">
                                 {action}
                             </div>
                         """, unsafe_allow_html=True)
 
-                        # 3. ČÁST: GRAF (UVNITŘ FRAMU)
-                        # Důležité: 'key' musí být unikátní pro každý graf a refresh
+                        # 3. GRAF (S opraveným Zoomem)
                         chart_key = f"chart_{asset['sym']}_{int(time.time())}"
                         fig = create_chart(df, color)
-                        # Použijeme width="stretch" místo use_container_width (fix warningu)
+                        # Použijeme width="stretch" pro plnou šířku
                         st.plotly_chart(fig, config={'displayModeBar': False}, key=chart_key)
 
-                        # 4. ČÁST: RISK MANAGEMENT (SL/TP)
+                        # 4. RISK MANAGEMENT (FIXED LAYOUT)
                         if is_live and score != 50:
                             st.markdown(f"""
-                                <div class="risk-container">
-                                    <div>
-                                        <span class="risk-label">STOP LOSS</span>
+                                <div class="risk-wrapper">
+                                    <div class="risk-col">
+                                        <span class="risk-label">STOP LOSS 🛑</span>
                                         <span class="risk-val sl-text">{sl:.2f}</span>
                                     </div>
-                                    <div style="text-align: right;">
-                                        <span class="risk-label">TAKE PROFIT</span>
+                                    <div class="risk-col" style="text-align: right;">
+                                        <span class="risk-label">TAKE PROFIT 🎯</span>
                                         <span class="risk-val tp-text">{tp:.2f}</span>
                                     </div>
                                 </div>
                             """, unsafe_allow_html=True)
+                        else:
+                             st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+
                     else:
                         st.warning(f"Načítám {asset['name']}...")
 
