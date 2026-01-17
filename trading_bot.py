@@ -9,10 +9,10 @@ from datetime import datetime
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
 st.set_page_config(
-    page_title="Sniper Bot V27", 
-    page_icon="👻", 
+    page_title="Sniper Bot V28", 
+    page_icon="💀", 
     layout="wide", 
-    initial_sidebar_state="collapsed" # Startujeme se zavřeným, aby vynikl overlay
+    initial_sidebar_state="collapsed" # Startujeme zavřené
 )
 
 # --- 2. SESSION STATE ---
@@ -21,52 +21,92 @@ if 'view' not in st.session_state:
 if 'selected_asset' not in st.session_state:
     st.session_state.selected_asset = 'BTC-USD'
 
-# --- 3. CSS (TRUE OVERLAY HACK) ---
+# --- 3. CSS (CENTERED MENU & FUNCTIONAL OVERLAY) ---
 st.markdown("""
     <style>
     /* Globální */
     .stApp { background-color: #050505; font-family: 'Helvetica Neue', sans-serif; }
     
-    /* === 1. OVERLAY SIDEBAR LOGIKA === */
-    /* Vytrhneme sidebar z layoutu a dáme ho 'nad' všechno */
+    /* === 1. OPRAVENÝ OVERLAY SIDEBAR === */
     section[data-testid="stSidebar"] {
-        position: fixed !important;
-        top: 0;
-        left: 0;
-        height: 100vh;
-        width: 320px !important; /* Širší menu */
-        z-index: 10000; /* Nejvyšší vrstva */
-        background-color: rgba(5, 5, 5, 0.95); /* Téměř neprůhledná černá */
+        background-color: rgba(10, 10, 10, 0.95); /* Černé sklo */
         border-right: 1px solid #333;
         box-shadow: 10px 0 30px rgba(0,0,0,0.8);
-        transition: transform 0.3s ease;
+        z-index: 99999;
+        /* DŮLEŽITÉ: Necháme Streamlit ovládat šířku a pozici pro zavírání,
+           ale vynutíme, aby neposouval hlavní obsah */
     }
 
-    /* Zabráníme Streamlitu, aby posouval hlavní obsah doprava */
+    /* Tímto zajistíme, že se hlavní obsah NEPOSUNE, když se menu otevře */
     .main .block-container {
-        padding-left: 5rem !important; /* Pevná mezera zleva */
-        padding-right: 5rem !important;
         max-width: 100% !important;
+        padding-left: 5rem !important; 
+        padding-right: 5rem !important;
+        transition: none !important; /* Žádné cukání */
     }
 
-    /* === 2. FIX OVLÁDACÍHO TLAČÍTKA (X / >) === */
-    /* Musíme zajistit, že křížek pro zavření je vidět */
-    button[kind="header"] {
-        z-index: 100001 !important; /* Ještě výš než sidebar */
-        color: #fff !important;
-        background: transparent;
-    }
-    /* Upravíme pozici tlačítka pro otevření, když je menu skryté */
-    [data-testid="collapsedControl"] {
-        left: 10px !important;
-        top: 10px !important;
-        background-color: #111 !important;
-        border: 1px solid #333 !important;
-        border-radius: 5px !important;
+    /* === 2. CENTROVÁNÍ OBSAHU V SIDEBARU === */
+    [data-testid="stSidebarUserContent"] {
+        display: flex;
+        flex-direction: column;
+        align-items: center; /* Horizontální centr */
+        text-align: center;
+        padding-top: 20px;
     }
 
-    /* === 3. STYLOVÁNÍ OBSAHU === */
-    /* Dashboard Cards */
+    /* Stylování tlačítek v menu - aby byla hezká a vycentrovaná */
+    .stButton {
+        width: 80%; /* Ne přes celou šířku, aby to vypadalo lépe vycentrované */
+        display: flex;
+        justify-content: center;
+    }
+    
+    .stButton button {
+        width: 100%;
+        border-radius: 30px; /* Kulatější tlačítka */
+        font-weight: 700;
+        border: 1px solid #333;
+        background: #111;
+        color: #aaa;
+        text-align: center; /* Text na střed */
+        padding: 10px 0;
+        transition: 0.3s;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .stButton button:hover {
+        background: #222;
+        color: #fff;
+        border-color: #00e676;
+        box-shadow: 0 0 15px rgba(0, 230, 118, 0.2);
+        transform: scale(1.05); /* Jemné zvětšení */
+    }
+
+    /* Logo v Sidebaru */
+    .sidebar-logo {
+        font-size: 26px;
+        font-weight: 900;
+        color: #fff;
+        margin-bottom: 30px;
+        letter-spacing: 4px;
+        text-shadow: 0 0 10px rgba(255,255,255,0.2);
+    }
+    
+    .sidebar-cat {
+        font-size: 10px;
+        font-weight: 900;
+        color: #555;
+        margin-top: 20px;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        width: 100%;
+        border-bottom: 1px solid #222;
+        padding-bottom: 5px;
+    }
+
+    /* === ZBYTEK STYLŮ (DASHBOARD) === */
     .header-flex { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
     .symbol-title { font-size: 28px; font-weight: 900; color: #fff; line-height: 1; }
     .symbol-desc { font-size: 14px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
@@ -89,13 +129,13 @@ st.markdown("""
     .ai-bar-bg { width: 100%; height: 6px; background-color: #222; border-radius: 3px; margin-top: 5px; overflow: hidden; }
     .ai-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease-in-out; }
 
-    /* Detail Clean Metrics */
+    /* DETAIL METRICS */
     .metric-clean { text-align: center; padding: 10px; }
     .metric-label-clean { color: #555; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
     .metric-val-clean { color: #fff; font-size: 36px; font-weight: 900; font-family: monospace; }
     .divider-clean { height: 1px; background-color: #222; margin: 20px 0; width: 100%; }
 
-    /* Sleep Mode */
+    /* SLEEP MODE */
     .sleep-overlay {
         height: 470px; display: flex; flex-direction: column; justify-content: center; align-items: center;
         background: rgba(20, 20, 20, 0.6); border-radius: 10px; border: 1px dashed #333;
@@ -106,17 +146,7 @@ st.markdown("""
     .header-dimmed { opacity: 0.4; filter: grayscale(100%); transition: opacity 0.5s; }
     @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 0.5; } 100% { transform: scale(1); opacity: 0.8; } }
     
-    /* Sidebar Tlačítka */
-    .stButton button { width: 100%; border-radius: 4px; font-weight: 600; border: none; background: #151515; color: #aaa; text-align: left; padding: 15px; margin-bottom: 5px; transition: 0.2s; }
-    .stButton button:hover { background: #222; color: #fff; border-left: 4px solid #00e676; padding-left: 11px; }
-    
-    /* Sidebar Logo */
-    .sidebar-logo { font-size: 20px; font-weight: 900; color: #fff; text-align: center; padding: 20px 0; border-bottom: 1px solid #222; margin-bottom: 20px; letter-spacing: 3px; }
-    .sidebar-cat { font-size: 10px; font-weight: 900; color: #444; margin: 15px 0 5px 10px; text-transform: uppercase; }
-    
-    header[data-testid="stHeader"] { background-color: transparent; pointer-events: none; }
-    /* Povolit klikání na hamburger menu i když je header průhledný */
-    [data-testid="collapsedControl"] { pointer-events: auto; }
+    header[data-testid="stHeader"] { background-color: transparent; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -230,47 +260,47 @@ def create_gauge(score, color):
 # --- 8. MAIN UI LOGIC ---
 
 assets_forex = [
-    {"sym": "EURUSD=X", "name": "EUR / USD", "desc": "Forex"},
-    {"sym": "GBPUSD=X", "name": "GBP / USD", "desc": "Forex"},
-    {"sym": "JPY=X", "name": "USD / JPY", "desc": "Forex"},
+    {"sym": "EURUSD=X", "name": "EUR / USD"},
+    {"sym": "GBPUSD=X", "name": "GBP / USD"},
+    {"sym": "JPY=X", "name": "USD / JPY"},
 ]
 assets_comm = [
-    {"sym": "GC=F", "name": "GOLD", "desc": "Zlato"},
-    {"sym": "ES=F", "name": "S&P 500", "desc": "Futures"},
+    {"sym": "GC=F", "name": "GOLD"},
+    {"sym": "ES=F", "name": "S&P 500"},
 ]
 assets_crypto = [
-    {"sym": "BTC-USD", "name": "BITCOIN", "desc": "Krypto"},
+    {"sym": "BTC-USD", "name": "BITCOIN"},
 ]
 all_assets = assets_forex + assets_comm + assets_crypto
 
-# --- OVERLAY SIDEBAR ---
+# --- CENTROVANÝ SIDEBAR MENU ---
 with st.sidebar:
-    st.markdown('<div class="sidebar-logo">SNIPER BOT</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-logo">🔫 SNIPER BOT</div>', unsafe_allow_html=True)
     
     def set_view(v, s=None):
         st.session_state.view = v
         if s: st.session_state.selected_asset = s
 
-    if st.button("🏠 DASHBOARD (PŘEHLED)", key="nav_home"):
+    if st.button("DASHBOARD"):
         set_view('dashboard')
     
-    st.markdown('<div class="sidebar-cat">FOREX TRHY</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-cat">Forex</div>', unsafe_allow_html=True)
     for asset in assets_forex:
-        if st.button(f"{asset['name']}", key=f"nav_{asset['sym']}"):
+        if st.button(asset['name'], key=f"nav_{asset['sym']}"):
             set_view('detail', asset['sym'])
 
-    st.markdown('<div class="sidebar-cat">KRYPTOMĚNY</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-cat">Krypto</div>', unsafe_allow_html=True)
     for asset in assets_crypto:
-        if st.button(f"{asset['name']}", key=f"nav_{asset['sym']}"):
+        if st.button(asset['name'], key=f"nav_{asset['sym']}"):
             set_view('detail', asset['sym'])
 
-    st.markdown('<div class="sidebar-cat">KOMODITY & INDEXY</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-cat">Futures</div>', unsafe_allow_html=True)
     for asset in assets_comm:
-        if st.button(f"{asset['name']}", key=f"nav_{asset['sym']}"):
+        if st.button(asset['name'], key=f"nav_{asset['sym']}"):
             set_view('detail', asset['sym'])
 
-    st.markdown("---")
-    st.caption("Status: V27 Stable")
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.caption("V28 Pro")
 
 # --- HLAVNÍ OBSAH ---
 placeholder = st.empty()
@@ -300,7 +330,7 @@ while True:
                             if not is_live:
                                 st.markdown(f"""
                                     <div class="header-flex header-dimmed">
-                                        <div><div class="symbol-title">{asset['name']}</div><div class="symbol-desc">{asset['desc']}</div></div>
+                                        <div><div class="symbol-title">{asset['name']}</div><div class="symbol-desc">{asset['sym']}</div></div>
                                         <div class="price-box"><div class="price-main">{price:.2f}</div><div class="price-change {change_class}">{change_str}</div></div>
                                     </div>
                                     <div class="sleep-overlay"><div class="sleep-emoji">😴</div><div class="sleep-text">TRH ZAVŘENÝ</div></div>
@@ -311,7 +341,7 @@ while True:
 
                                 st.markdown(f"""
                                     <div class="header-flex">
-                                        <div><div class="symbol-title">{asset['name']}</div><div class="symbol-desc">{asset['desc']}</div></div>
+                                        <div><div class="symbol-title">{asset['name']}</div><div class="symbol-desc">{asset['sym']}</div></div>
                                         <div class="price-box"><div class="price-main">{price:.2f}</div><div class="price-change {change_class}">{change_str}</div></div>
                                     </div>
                                     <div class="signal-box" style="background-color: {color}; box-shadow: 0 0 25px {hex_to_rgba(color, 0.4)};">{action}</div>
@@ -334,7 +364,7 @@ while True:
                         else:
                             st.warning(f"Načítám {asset['name']}...")
 
-        # === DETAIL (CLEAN) ===
+        # === DETAIL ===
         elif st.session_state.view == 'detail':
             sym = st.session_state.selected_asset
             asset_info = next((a for a in all_assets if a['sym'] == sym), None)
@@ -358,10 +388,9 @@ while True:
                     arrow = "▲" if pct_change >= 0 else "▼"
                     change_str = f"{arrow} {abs(pct_change):.2f}%"
 
-                    # Detail Header
                     c1, c2 = st.columns([2, 1])
                     with c1:
-                        st.markdown(f"""<div style="margin-bottom: 20px;"><div class="symbol-title" style="font-size: 50px;">{asset_info['name']}</div><div class="symbol-desc">{asset_info['desc']} | {sym}</div></div>""", unsafe_allow_html=True)
+                        st.markdown(f"""<div style="margin-bottom: 20px;"><div class="symbol-title" style="font-size: 50px;">{asset_info['name']}</div><div class="symbol-desc">{sym}</div></div>""", unsafe_allow_html=True)
                     with c2:
                         st.markdown(f"""<div style="text-align: right;"><div class="price-main" style="font-size: 60px;">{price:.2f}</div><div class="price-change {change_class}" style="font-size: 24px;">{change_str}</div></div>""", unsafe_allow_html=True)
 
