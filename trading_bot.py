@@ -7,348 +7,222 @@ import warnings
 import os
 from datetime import datetime
 
-# --- PRO OPRAVU YFINANCE (Session & Caching) ---
-from requests import Session
-from requests_cache import CacheMixin
-from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
-from pyrate_limiter import Duration, RequestRate, Limiter
-
-# --- 1. CONFIG & SESSION SETUP ---
+# --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
 os.environ["STREAMLIT_SILENCE_DEPRECATION_WARNINGS"] = "1"
 
-st.set_page_config(page_title="Trading Sniper PRO v6", page_icon="🎯", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="High Leverage Sniper v8", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
-# Nastavení "Smart Session" pro Yahoo Finance
-# Používáme backend='memory', aby se data neukládala do souboru (což na Cloudu zlobí)
-class CachedLimiterSession(CacheMixin, LimiterMixin, Session):
-    pass
-
-session = CachedLimiterSession(
-    limiter=Limiter(RequestRate(2, Duration.SECOND*5)), # Max 2 dotazy za 5 sekund
-    bucket_class=MemoryQueueBucket,
-    backend='memory', # DŮLEŽITÉ: Ukládáme jen do RAM
-    expire_after=60,  # Cache platí 60 sekund
-)
-
-# DŮLEŽITÉ: Přidáme hlavičku prohlížeče, aby nás Yahoo neblokovalo
-session.headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-
-# --- 2. CSS STYLING ---
+# --- 2. CSS STYLING (Agresivní vzhled) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #0e1117; }
+    .stApp { background-color: #000000; }
     .no-select { -webkit-user-select: none; -ms-user-select: none; user-select: none; cursor: default; }
     
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-    .symbol-name { font-size: 18px; font-weight: 700; color: #fff; }
+    .symbol-name { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: 1px; }
 
-    .badge { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
-    .badge-open { background-color: #00ff41; color: #000; box-shadow: 0 0 10px rgba(0, 255, 65, 0.4); }
-    .badge-closed { background-color: #333; color: #888; border: 1px solid #555; }
+    .badge-leverage { background-color: #ff9900; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
 
-    .price-tag { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 5px; font-family: 'Courier New', monospace; }
+    .price-tag { font-size: 32px; font-weight: 900; color: #fff; font-family: 'Courier New', monospace; text-shadow: 0 0 10px rgba(255,255,255,0.2); }
     
-    /* TREND INDICATOR */
-    .trend-indicator { font-size: 13px; font-weight: 600; margin-bottom: 15px; letter-spacing: 0.5px; }
-    .trend-down { color: #ff2b2b; }
-    .trend-up { color: #00ff41; }
-
-    .action-container { 
-        display: flex; justify-content: center; align-items: center; text-align: center;
-        height: 70px; border-radius: 8px; margin-bottom: 10px; 
-        font-weight: 900; font-size: 20px; text-transform: uppercase; letter-spacing: 1px;
-        line-height: 1.2;
+    .action-box { 
+        text-align: center; padding: 10px; border-radius: 6px; margin: 10px 0;
+        font-weight: 900; font-size: 24px; text-transform: uppercase; 
     }
-    
-    .act-buy { background-color: #00ff41; color: #000; border: 2px solid #00ff41; box-shadow: 0 0 15px rgba(0, 255, 65, 0.3); }
-    .act-sell { background-color: #ff2b2b; color: #fff; border: 2px solid #ff2b2b; box-shadow: 0 0 15px rgba(255, 43, 43, 0.3); }
-    .act-wait { background-color: #262730; border: 2px solid #555; color: #aaa; }
-    .act-offline { background-color: #111; border: 2px dashed #333; color: #444; }
-    
-    .risk-box { display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; font-family: monospace; background: #1c1e24; padding: 5px; border-radius: 4px; }
-    .risk-sl { color: #ff2b2b; font-weight: bold; }
-    .risk-tp { color: #00ff41; font-weight: bold; }
-    
-    .stProgress > div > div > div > div { background-color: #00ff41; }
+    .buy { background: #00ff41; color: black; box-shadow: 0 0 20px rgba(0,255,65,0.4); }
+    .sell { background: #ff2b2b; color: white; box-shadow: 0 0 20px rgba(255,43,43,0.4); }
+    .wait { background: #222; color: #555; border: 1px solid #444; }
+
+    .risk-row { display: flex; justify-content: space-between; font-family: monospace; font-size: 14px; margin-top: 5px; }
+    .sl-val { color: #ff2b2b; }
+    .tp-val { color: #00ff41; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. DATA ENGINE (VYLEPŠENÝ) ---
+# --- 3. DATA ENGINE (YFINANCE FUTURES) ---
 @st.cache_data(ttl=15, show_spinner=False)
-def get_market_data(symbol):
+def get_futures_data(symbol):
     try:
-        # Používáme naši smart session
-        ticker = yf.Ticker(symbol, session=session)
+        # Použijeme čisté stažení bez session (nejspolehlivější metoda teď)
+        ticker = yf.Ticker(symbol)
+        # Stáhneme data - period 5d pro výpočet EMA 200
         df = ticker.history(period="5d", interval="15m")
         
-        if df.empty or len(df) < 50: 
-            return None, None
+        if df.empty or len(df) < 50: return None, None
             
-        # TIMEZONE FIX
+        # Timezone fix
         if df.index.tzinfo is None: df.index = df.index.tz_localize('UTC')
         df.index = df.index.tz_convert('Europe/Prague')
 
-        # --- VÝPOČET INDIKÁTORŮ ---
-        
-        # 1. EMA 200 (Trend)
+        # --- INDIKÁTORY PRO PÁKU ---
+        # 1. Trend (EMA 200) - Páka se obchoduje jen po trendu!
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
-        # 2. RSI (Síla)
+        # 2. RSI (14)
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         df['RSI'] = 100 - (100 / (1 + rs))
 
-        # 3. MACD (Momentum)
-        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-        df['MACD'] = exp1 - exp2
-        df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
-
-        # 4. BOLLINGER BANDS (Volatilita)
+        # 3. Bollinger Bands (20, 2) - Pro odrazy
         df['SMA_20'] = df['Close'].rolling(window=20).mean()
         df['STD_20'] = df['Close'].rolling(window=20).std()
         df['BB_Upper'] = df['SMA_20'] + (df['STD_20'] * 2)
         df['BB_Lower'] = df['SMA_20'] - (df['STD_20'] * 2)
 
-        # 5. ATR (Pro výpočet Stop Loss)
+        # 4. ATR (14) - Pro výpočet Stop Lossu
         high_low = df['High'] - df['Low']
         high_close = (df['High'] - df['Close'].shift()).abs()
         low_close = (df['Low'] - df['Close'].shift()).abs()
         ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = ranges.max(axis=1)
-        df['ATR'] = true_range.rolling(14).mean()
+        df['ATR'] = ranges.max(axis=1).rolling(14).mean()
 
         return df.iloc[-1], df
-    except Exception as e:
-        st.error(f"Chyba u {symbol}: {e}") # Zobrazí chybu na obrazovce
+    except:
         return None, None
 
-def analyze_logic_smart(row):
-    """
-    Pokročilá logika "Sniper"
-    """
-    score = 50.0 
+def sniper_logic(row):
+    score = 50
     reasons = []
     
-    # Časová kontrola (tolerance 65 min kvůli zpoždění Yahoo)
+    # Check stáří dat (Futures mají pauzu 23:00-00:00)
     last_time = row.name
     now = pd.Timestamp.now(tz='Europe/Prague')
     diff = (now - last_time).total_seconds() / 60
-    is_open = diff < 70 # Zvýšena tolerance
-
-    if not is_open:
-        return 50, False, "NEZNÁMÝ", [], 0.0, 0.0
-
-    # Načtení hodnot
-    price = float(row['Close'])
-    ema = float(row['EMA_200'])
-    rsi = float(row['RSI'])
-    macd = float(row['MACD'])
-    signal = float(row['Signal_Line'])
-    bb_upper = float(row['BB_Upper'])
-    bb_lower = float(row['BB_Lower'])
-    atr = float(row['ATR'])
-
-    # 1. URČENÍ HLAVNÍHO TRENDU (EMA 200)
-    if price > ema:
-        main_trend = "UP"
-        score += 5
-    else:
-        main_trend = "DOWN"
-        score -= 5
-
-    # 2. RSI + BOLLINGER BANDS KOMBO (Sniper Vstupy)
     
-    if main_trend == "UP":
-        # Cena je dole (sleva) v rostoucím trendu
-        if price <= bb_lower * 1.001: 
-            score += 20
-            reasons.append("Cena na BB Low (Buy Zone)")
-        if rsi < 45: 
-            score += 15
-            reasons.append("RSI pod 45 (Pullback)")
-        # Pokud je cena nahoře, opatrně
-        if price >= bb_upper:
-            score -= 10
-            reasons.append("Cena nahoře (Resistance)")
+    # Forex stojí o víkendu, Futures taky
+    is_weekend = now.weekday() >= 5
+    is_open = diff < 60 or is_weekend # Tolerance pro zpoždění
 
-    elif main_trend == "DOWN":
-        # Cena je nahoře (drahé) v klesajícím trendu
-        if price >= bb_upper * 0.999:
-            score -= 20
-            reasons.append("Cena na BB High (Sell Zone)")
-        if rsi > 55:
-            score -= 15
-            reasons.append("RSI nad 55 (Pullback)")
-        # Pokud je cena dole, opatrně
-        if price <= bb_lower:
-            score += 10
-            reasons.append("Cena dole (Support)")
+    price = row['Close']
+    ema = row['EMA_200']
+    rsi = row['RSI']
+    bb_low = row['BB_Lower']
+    bb_high = row['BB_Upper']
+    atr = row['ATR']
 
-    # 3. MACD (Momentum)
-    if macd > signal: score += 10
-    else: score -= 10
-
-    # 4. SQUEEZE FILTR (Nízká volatilita)
-    bb_width = (bb_upper - bb_lower) / price
-    if bb_width < 0.0015: # Extrémně úzké pásmo (trh spí)
-        score = 50 + (score - 50) * 0.5 # Snížíme sílu signálu
-        reasons.append("Squeeze (Nízká volatilita)")
-
-    final_score = int(max(0, min(100, score)))
+    # 1. URČENÍ TRENDU
+    trend = "UP" if price > ema else "DOWN"
     
-    # 5. RISK MANAGEMENT (SL / TP)
-    sl = 0.0
-    tp = 0.0
-    
-    # Buy signál
-    if final_score >= 55:
-        sl = price - (2.0 * atr) # Stop pod volatilitou
-        tp = price + (3.0 * atr) # Target 1.5x risk
-        
-    # Sell signál
-    elif final_score <= 45:
-        sl = price + (2.0 * atr)
-        tp = price - (3.0 * atr)
+    # 2. VSTUPNÍ LOGIKA (Mean Reversion v Trendu)
+    if trend == "UP":
+        if price <= bb_low * 1.0005: # Cena na spodním pásmu
+            score += 25; reasons.append("Touch BB Low")
+        if rsi < 40: 
+            score += 15; reasons.append("RSI Oversold")
+    else: # DOWN
+        if price >= bb_high * 0.9995: # Cena na horním pásmu
+            score -= 25; reasons.append("Touch BB High")
+        if rsi > 60:
+            score -= 15; reasons.append("RSI Overbought")
 
-    return final_score, is_open, main_trend, reasons, sl, tp
+    # 3. FILTR SILNÉHO POHYBU (Breakout)
+    # Pokud svíčka proráží pásmo a RSI je extrémní, jdeme proti (Reversal)
+    if rsi > 75: score -= 10; reasons.append("RSI Extreme High")
+    if rsi < 25: score += 10; reasons.append("RSI Extreme Low")
+
+    final_score = max(0, min(100, score))
+    
+    # 4. RISK MANAGEMENT (Klíčové pro páku)
+    # Pro páku chceme těsnější SL (1.5x ATR) a větší TP (3x ATR)
+    sl = price - (1.5 * atr) if final_score > 50 else price + (1.5 * atr)
+    tp = price + (3.0 * atr) if final_score > 50 else price - (3.0 * atr)
+
+    return final_score, is_open, trend, reasons, sl, tp
 
 # --- 4. MAIN APP ---
-st.title("🎯 Trading Sniper PRO v6.0")
-st.markdown("#### ⚡ Data Engine: YFinance Smart-Session (RAM Mode)")
+st.title("⚡ Futures & Forex Sniper")
+st.markdown("Optimalizováno pro vysokou volatilitu a páku (S&P 500, Gold, Oil)")
 
 placeholder = st.empty()
 
 while True:
     with placeholder.container():
-        refresh_id = datetime.now().strftime('%H%M%S')
-        st.write(f"🕒 Aktualizováno: **{datetime.now().strftime('%H:%M:%S')}**")
-
+        st.caption(f"Last Update: {datetime.now().strftime('%H:%M:%S')}")
+        
         cols = st.columns(4)
         
-        symbols = [
-            {"sym": "EURUSD=X", "name": "EUR / USD", "col": cols[0]},
-            {"sym": "GBPUSD=X", "name": "GBP / USD", "col": cols[1]},
-            {"sym": "BTC-USD", "name": "BITCOIN", "col": cols[2]},
-            {"sym": "GC=F", "name": "GOLD", "col": cols[3]}
+        # ZDE JSOU SYMBOLY PRO VYSOKOU PÁKU (FUTURES)
+        # =F znamená Futures kontrakt (často lepší data než indexy)
+        assets = [
+            {"sym": "ES=F", "name": "S&P 500", "lev": "1:500", "col": cols[0]},  # Futures S&P
+            {"sym": "NQ=F", "name": "NASDAQ", "lev": "1:500", "col": cols[1]},   # Futures Nasdaq
+            {"sym": "GC=F", "name": "GOLD (XAU)", "lev": "1:100", "col": cols[2]}, # Zlato
+            {"sym": "EURUSD=X", "name": "EUR/USD", "lev": "1:30", "col": cols[3]}  # Forex
         ]
 
-        for item in symbols:
-            with item["col"]:
+        for asset in assets:
+            with asset["col"]:
                 with st.container(border=True):
-                    row, df = get_market_data(item["sym"])
+                    # Header
+                    st.markdown(f"""
+                        <div class="card-header">
+                            <span class="symbol-name">{asset['name']}</span>
+                            <span class="badge-leverage">{asset['lev']}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    row, df = get_futures_data(asset['sym'])
                     
                     if row is not None:
-                        score, is_open, main_trend, reasons, sl, tp = analyze_logic_smart(row)
-                        price = float(row['Close'])
+                        score, is_open, trend, reasons, sl, tp = sniper_logic(row)
                         
-                        # LOGIKA ZOBRAZENÍ
+                        # Price
+                        st.markdown(f'<div class="price-tag">{row["Close"]:.2f}</div>', unsafe_allow_html=True)
+                        
+                        # Action Logic
                         if not is_open:
-                            badge_html = "<span class='badge badge-closed'>Zavřeno</span>"
-                            action_class = "act-offline"
-                            action_text = "OFFLINE 💤"
-                            trend_html = "<span style='color:#666'>Trh spí</span>"
-                            bar_color = "grey"
+                            st.markdown('<div class="action-box wait" style="font-size:16px">ZAVŘENO 💤</div>', unsafe_allow_html=True)
+                        elif score >= 65:
+                            st.markdown('<div class="action-box buy">LONG (BUY) 🚀</div>', unsafe_allow_html=True)
+                        elif score <= 35:
+                            st.markdown('<div class="action-box sell">SHORT (SELL) 📉</div>', unsafe_allow_html=True)
                         else:
-                            badge_html = "<span class='badge badge-open'>LIVE 🟢</span>"
+                            st.markdown('<div class="action-box wait">WAIT ✋</div>', unsafe_allow_html=True)
                             
-                            # Vypisujeme Trend
-                            if main_trend == "DOWN":
-                                trend_html = "<span class='trend-down'>📉 HLAVNÍ TREND: DOLŮ</span>"
-                            else:
-                                trend_html = "<span class='trend-up'>🚀 HLAVNÍ TREND: NAHORU</span>"
-
-                            # Akce podle skóre
-                            if score >= 75: action_text = "STRONG BUY 🚀"; action_class = "act-buy"; bar_color="#00ff41"
-                            elif score >= 55: action_text = "BUY ↗"; action_class = "act-buy"; bar_color="#00ff41"
-                            elif score <= 25: action_text = "STRONG SELL 📉"; action_class = "act-sell"; bar_color="#ff2b2b"
-                            elif score <= 45: action_text = "SELL ↘"; action_class = "act-sell"; bar_color="#ff2b2b"
-                            else: action_text = "WAIT ✋"; action_class = "act-wait"; bar_color="#ffcc00"
-
-                        # Karta HTML
-                        st.markdown(f"""
-                        <div class="no-select">
-                            <div class="card-header"><span class="symbol-name">{item['name']}</span>{badge_html}</div>
-                            <div class="price-tag">{price:.2f}</div>
-                            <div class="trend-indicator">{trend_html}</div>
-                            <div class="action-container {action_class}">{action_text}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                        # Progress Bar + AI Přesnost
-                        st.markdown(f"""
-                        <div style="background-color: #333; border-radius: 5px; height: 8px; width: 100%; margin-bottom: 5px;">
-                            <div style="background-color: {bar_color}; width: {score}%; height: 100%; border-radius: 5px; transition: width 0.5s;"></div>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; font-size:12px; color:#aaa;">
-                            <span>AI SKÓRE</span>
-                            <span><b>{score}/100</b></span>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                        # SL / TP Box (Jen když je trh aktivní a skóre není neutrál)
-                        if is_open and score != 50:
+                        # Risk Management (SL/TP)
+                        if is_open and (score >= 65 or score <= 35):
                             st.markdown(f"""
-                            <div class="risk-box">
-                                <span class="risk-sl">🛑 SL: {sl:.4f}</span>
-                                <span class="risk-tp">🎯 TP: {tp:.4f}</span>
+                            <div class="risk-row">
+                                <span class="sl-val">STOP: {sl:.2f}</span>
+                                <span class="tp-val">TARGET: {tp:.2f}</span>
                             </div>
                             """, unsafe_allow_html=True)
-                        else:
-                            st.markdown("<div style='height: 33px;'></div>", unsafe_allow_html=True) # Spacer
 
-                        # Důvody (Reasons)
+                        # Trend Bar
+                        color = "#00ff41" if score > 50 else "#ff2b2b"
+                        st.progress(score)
+                        
+                        # Reasons
                         if reasons:
-                            reason_str = ", ".join(reasons)
-                            st.caption(f"💡 {reason_str}")
-                        else:
-                            st.caption("🔍 Analyzuji...")
+                            st.caption(f"Signál: {', '.join(reasons)}")
 
-                        # GRAF
-                        line_col = '#555'
-                        fill_col = 'rgba(0,0,0,0)'
-                        subset_data = df.tail(40)
-                        
+                        # Chart (BB)
                         if is_open:
-                            line_col = bar_color
-                            fill_col = f"rgba({0 if score>50 else 255}, {255 if score>50 else 0}, 0, 0.1)"
+                            subset = df.tail(30)
+                            fig = go.Figure()
+                            
+                            # Svíčky (nebo linka)
+                            fig.add_trace(go.Scatter(x=subset.index, y=subset['Close'], mode='lines', line=dict(color=color, width=2)))
+                            
+                            # Bollinger Bands
+                            fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Upper'], line=dict(color='rgba(255,255,255,0.2)', width=1), hoverinfo='skip'))
+                            fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Lower'], line=dict(color='rgba(255,255,255,0.2)', width=1), fill='tonexty', fillcolor='rgba(255,255,255,0.05)', hoverinfo='skip'))
 
-                        y_min = subset_data['Close'].min()
-                        y_max = subset_data['Close'].max()
-                        padding = (y_max - y_min) * 0.1 if y_max != y_min else y_max * 0.001
-                        
-                        fig = go.Figure(data=go.Scatter(
-                            x=subset_data.index, 
-                            y=subset_data['Close'], 
-                            mode='lines',
-                            line=dict(color=line_col, width=2),
-                            fill='tozeroy',
-                            fillcolor=fill_col
-                        ))
-                        
-                        # Přidání Bollinger Bands do grafu (tenké čáry)
-                        fig.add_trace(go.Scatter(x=subset_data.index, y=subset_data['BB_Upper'], line=dict(color='rgba(255,255,255,0.1)', width=1), hoverinfo='skip'))
-                        fig.add_trace(go.Scatter(x=subset_data.index, y=subset_data['BB_Lower'], line=dict(color='rgba(255,255,255,0.1)', width=1), hoverinfo='skip'))
-                        
-                        fig.update_layout(
-                            margin=dict(l=0, r=0, t=10, b=0),
-                            height=50,
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            xaxis=dict(showgrid=False, showticklabels=False),
-                            yaxis=dict(showgrid=False, showticklabels=False, range=[y_min - padding, y_max + padding]),
-                            showlegend=False,
-                            hovermode="x unified"
-                        )
-                        st.plotly_chart(fig, config={'displayModeBar': False}, key=f"g_{item['sym']}_{refresh_id}")
-
+                            fig.update_layout(
+                                margin=dict(l=0, r=0, t=0, b=0),
+                                height=50,
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                xaxis=dict(visible=False),
+                                yaxis=dict(visible=False),
+                                showlegend=False
+                            )
+                            st.plotly_chart(fig, config={'displayModeBar': False}, key=f"chart_{asset['sym']}_{time.time()}")
+                            
                     else:
-                        st.warning(f"Data pro {item['name']} nedostupná.")
-
-        st.divider()
-        st.caption("Auto-refresh 15s. Powered by Python & Yahoo Smart-Session.")
+                        st.warning("Data načítám...")
 
     time.sleep(15)

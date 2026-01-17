@@ -2,7 +2,3 @@ streamlit
 yfinance
 pandas
 plotly
-requests
-requests-cache
-requests-ratelimiter
-pyrate-limiter
