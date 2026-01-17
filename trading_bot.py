@@ -9,10 +9,10 @@ from datetime import datetime
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
 st.set_page_config(
-    page_title="Sniper Bot V28", 
+    page_title="Sniper Bot V29", 
     page_icon="💀", 
     layout="wide", 
-    initial_sidebar_state="collapsed" # Startujeme zavřené
+    initial_sidebar_state="collapsed"
 )
 
 # --- 2. SESSION STATE ---
@@ -20,93 +20,46 @@ if 'view' not in st.session_state:
     st.session_state.view = 'dashboard'
 if 'selected_asset' not in st.session_state:
     st.session_state.selected_asset = 'BTC-USD'
+if 'menu_open' not in st.session_state:
+    st.session_state.menu_open = False
 
-# --- 3. CSS (CENTERED MENU & FUNCTIONAL OVERLAY) ---
+# --- 3. CSS (KILL SIDEBAR & MENU STYLING) ---
 st.markdown("""
     <style>
     /* Globální */
     .stApp { background-color: #050505; font-family: 'Helvetica Neue', sans-serif; }
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
     
-    /* === 1. OPRAVENÝ OVERLAY SIDEBAR === */
-    section[data-testid="stSidebar"] {
-        background-color: rgba(10, 10, 10, 0.95); /* Černé sklo */
-        border-right: 1px solid #333;
-        box-shadow: 10px 0 30px rgba(0,0,0,0.8);
-        z-index: 99999;
-        /* DŮLEŽITÉ: Necháme Streamlit ovládat šířku a pozici pro zavírání,
-           ale vynutíme, aby neposouval hlavní obsah */
-    }
-
-    /* Tímto zajistíme, že se hlavní obsah NEPOSUNE, když se menu otevře */
-    .main .block-container {
-        max-width: 100% !important;
-        padding-left: 5rem !important; 
-        padding-right: 5rem !important;
-        transition: none !important; /* Žádné cukání */
-    }
-
-    /* === 2. CENTROVÁNÍ OBSAHU V SIDEBARU === */
-    [data-testid="stSidebarUserContent"] {
+    /* 1. ZABÍT SIDEBAR (Už se nikdy neukáže) */
+    [data-testid="stSidebar"] { display: none; }
+    [data-testid="collapsedControl"] { display: none; }
+    
+    /* 2. MENU GRID STYLES */
+    .menu-card {
+        background: #111;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        transition: transform 0.2s, border-color 0.2s;
+        cursor: pointer;
+        margin-bottom: 20px;
+        height: 100px;
         display: flex;
         flex-direction: column;
-        align-items: center; /* Horizontální centr */
-        text-align: center;
-        padding-top: 20px;
-    }
-
-    /* Stylování tlačítek v menu - aby byla hezká a vycentrovaná */
-    .stButton {
-        width: 80%; /* Ne přes celou šířku, aby to vypadalo lépe vycentrované */
-        display: flex;
         justify-content: center;
+        align-items: center;
     }
-    
-    .stButton button {
-        width: 100%;
-        border-radius: 30px; /* Kulatější tlačítka */
-        font-weight: 700;
-        border: 1px solid #333;
-        background: #111;
-        color: #aaa;
-        text-align: center; /* Text na střed */
-        padding: 10px 0;
-        transition: 0.3s;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .stButton button:hover {
-        background: #222;
-        color: #fff;
+    .menu-card:hover {
+        transform: scale(1.03);
         border-color: #00e676;
         box-shadow: 0 0 15px rgba(0, 230, 118, 0.2);
-        transform: scale(1.05); /* Jemné zvětšení */
     }
+    .menu-icon { font-size: 30px; margin-bottom: 5px; }
+    .menu-title { font-size: 16px; font-weight: 900; color: #fff; text-transform: uppercase; }
+    .menu-sub { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
 
-    /* Logo v Sidebaru */
-    .sidebar-logo {
-        font-size: 26px;
-        font-weight: 900;
-        color: #fff;
-        margin-bottom: 30px;
-        letter-spacing: 4px;
-        text-shadow: 0 0 10px rgba(255,255,255,0.2);
-    }
-    
-    .sidebar-cat {
-        font-size: 10px;
-        font-weight: 900;
-        color: #555;
-        margin-top: 20px;
-        margin-bottom: 10px;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        width: 100%;
-        border-bottom: 1px solid #222;
-        padding-bottom: 5px;
-    }
-
-    /* === ZBYTEK STYLŮ (DASHBOARD) === */
+    /* 3. DASHBOARD STYLES */
     .header-flex { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
     .symbol-title { font-size: 28px; font-weight: 900; color: #fff; line-height: 1; }
     .symbol-desc { font-size: 14px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
@@ -130,10 +83,9 @@ st.markdown("""
     .ai-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease-in-out; }
 
     /* DETAIL METRICS */
-    .metric-clean { text-align: center; padding: 10px; }
-    .metric-label-clean { color: #555; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
-    .metric-val-clean { color: #fff; font-size: 36px; font-weight: 900; font-family: monospace; }
-    .divider-clean { height: 1px; background-color: #222; margin: 20px 0; width: 100%; }
+    .detail-metric-box { background: #111; padding: 20px; border-radius: 10px; border: 1px solid #333; text-align: center; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; min-height: 140px; }
+    .metric-label { color: #888; font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
+    .metric-val { color: #fff; font-size: 32px; font-weight: 900; font-family: monospace; }
 
     /* SLEEP MODE */
     .sleep-overlay {
@@ -147,15 +99,22 @@ st.markdown("""
     @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 0.5; } 100% { transform: scale(1); opacity: 0.8; } }
     
     header[data-testid="stHeader"] { background-color: transparent; }
+    
+    /* MENU BUTTON STYLE */
+    div.stButton > button:first-child {
+        border-radius: 8px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. POMOCNÉ FUNKCE ---
+# --- 4. DATA LOGIC (UNCHANGED) ---
 def hex_to_rgba(hex_color, alpha=0.2):
     hex_color = hex_color.lstrip('#')
     return f"rgba({int(hex_color[0:2], 16)}, {int(hex_color[2:4], 16)}, {int(hex_color[4:6], 16)}, {alpha})"
 
-# --- 5. DATA ENGINE ---
 @st.cache_data(ttl=30, show_spinner=False)
 def get_data(symbol):
     try:
@@ -164,13 +123,11 @@ def get_data(symbol):
         if df.empty or len(df) < 50: return None
         if df.index.tzinfo is None: df.index = df.index.tz_localize('UTC')
         df.index = df.index.tz_convert('Europe/Prague')
-
         lookback = 96 if len(df) > 96 else len(df) - 1
         open_price_24h = df['Close'].iloc[-lookback]
         current_price = df['Close'].iloc[-1]
         pct_change = ((current_price - open_price_24h) / open_price_24h) * 100
         df['Pct_Change'] = pct_change
-
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         exp1 = df['Close'].ewm(span=12, adjust=False).mean()
         exp2 = df['Close'].ewm(span=26, adjust=False).mean()
@@ -189,7 +146,6 @@ def get_data(symbol):
         return df
     except: return None
 
-# --- 6. LOGIKA ---
 def analyze_market_balanced(df, symbol):
     row = df.iloc[-1]
     price = row['Close']
@@ -197,13 +153,11 @@ def analyze_market_balanced(df, symbol):
     now = pd.Timestamp.now(tz='Europe/Prague')
     is_weekend = now.weekday() >= 5 
     is_crypto = "BTC" in symbol
-    
     if is_weekend and not is_crypto: is_live = False
     else:
         last_time = row.name
         diff = (now - last_time).total_seconds() / 60
         is_live = diff < 120
-
     score = 50.0
     trend_up = price > row['EMA_200']
     if trend_up: score += 10
@@ -220,16 +174,13 @@ def analyze_market_balanced(df, symbol):
     if price <= row['BB_Lower']: score += 10
     if price >= row['BB_Upper']: score -= 10
     score = int(max(0, min(100, score)))
-
     if score >= 60: action, color = "LONG / KOUPIT 🚀", "#00e676"
     elif score <= 40: action, color = "SHORT / PRODAT 📉", "#ff4444" 
     else: action, color = "WAIT / ČEKAT ✋", "#CCCCCC"
-
     sl = price - (2*atr) if score > 50 else price + (2*atr)
     tp = price + (3*atr) if score > 50 else price - (3*atr)
     return score, action, color, sl, tp, is_live
 
-# --- 7. GRAFY ---
 def create_chart_mini(df, color):
     subset = df.tail(50)
     y_min, y_max = subset['Close'].min(), subset['Close'].max()
@@ -257,63 +208,87 @@ def create_gauge(score, color):
     fig.update_layout(height=250, margin=dict(l=10, r=10, t=50, b=10), paper_bgcolor='rgba(0,0,0,0)')
     return fig
 
-# --- 8. MAIN UI LOGIC ---
+# --- 8. LOGIKA MENU A NAVIGACE ---
 
-assets_forex = [
-    {"sym": "EURUSD=X", "name": "EUR / USD"},
-    {"sym": "GBPUSD=X", "name": "GBP / USD"},
-    {"sym": "JPY=X", "name": "USD / JPY"},
+assets = [
+    {"sym": "BTC-USD", "name": "BITCOIN", "desc": "Krypto"},
+    {"sym": "EURUSD=X", "name": "EUR/USD", "desc": "Forex"},
+    {"sym": "GBPUSD=X", "name": "GBP/USD", "desc": "Forex"},
+    {"sym": "JPY=X", "name": "USD/JPY", "desc": "Forex"},
+    {"sym": "GC=F", "name": "GOLD", "desc": "Komodity"},
+    {"sym": "ES=F", "name": "S&P 500", "desc": "Indexy"},
 ]
-assets_comm = [
-    {"sym": "GC=F", "name": "GOLD"},
-    {"sym": "ES=F", "name": "S&P 500"},
-]
-assets_crypto = [
-    {"sym": "BTC-USD", "name": "BITCOIN"},
-]
-all_assets = assets_forex + assets_comm + assets_crypto
 
-# --- CENTROVANÝ SIDEBAR MENU ---
-with st.sidebar:
-    st.markdown('<div class="sidebar-logo">🔫 SNIPER BOT</div>', unsafe_allow_html=True)
+def toggle_menu():
+    st.session_state.menu_open = not st.session_state.menu_open
+
+def select_asset(sym):
+    st.session_state.selected_asset = sym
+    st.session_state.view = 'detail'
+    st.session_state.menu_open = False # Zavřít menu po výběru
+
+def go_dashboard():
+    st.session_state.view = 'dashboard'
+    st.session_state.menu_open = False
+
+# --- UI: MENU TLAČÍTKO ---
+# Umístěno nahoře
+col_menu, col_spacer = st.columns([1, 10])
+with col_menu:
+    if st.button("☰ MENU", type="primary", use_container_width=True):
+        toggle_menu()
+
+# --- UI: MENU OBSAH (OVERLAY) ---
+if st.session_state.menu_open:
+    st.markdown("<h1 style='text-align: center; color: #00e676; margin-bottom: 40px;'>CENTRÁLA (MENU)</h1>", unsafe_allow_html=True)
     
-    def set_view(v, s=None):
-        st.session_state.view = v
-        if s: st.session_state.selected_asset = s
-
-    if st.button("DASHBOARD"):
-        set_view('dashboard')
+    # Grid pro tlačítka v menu
+    cols = st.columns(3)
     
-    st.markdown('<div class="sidebar-cat">Forex</div>', unsafe_allow_html=True)
-    for asset in assets_forex:
-        if st.button(asset['name'], key=f"nav_{asset['sym']}"):
-            set_view('detail', asset['sym'])
-
-    st.markdown('<div class="sidebar-cat">Krypto</div>', unsafe_allow_html=True)
-    for asset in assets_crypto:
-        if st.button(asset['name'], key=f"nav_{asset['sym']}"):
-            set_view('detail', asset['sym'])
-
-    st.markdown('<div class="sidebar-cat">Futures</div>', unsafe_allow_html=True)
-    for asset in assets_comm:
-        if st.button(asset['name'], key=f"nav_{asset['sym']}"):
-            set_view('detail', asset['sym'])
-
+    # 1. Tlačítko Dashboard
+    with cols[0]:
+        with st.container(border=True):
+            st.markdown("<div style='text-align: center; font-size: 40px;'>🏠</div>", unsafe_allow_html=True)
+            if st.button("PŘEHLED TRHŮ", use_container_width=True):
+                go_dashboard()
+                st.rerun()
+    
+    # 2. Tlačítka pro aktiva
+    for i, asset in enumerate(assets):
+        # Rozhazujeme do sloupců (modulo)
+        col_idx = (i + 1) % 3 
+        with cols[col_idx]:
+            with st.container(border=True):
+                st.markdown(f"<div style='text-align: center; font-size: 30px;'>🔎</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align: center; font-weight: bold;'>{asset['name']}</div>", unsafe_allow_html=True)
+                if st.button(f"OTEVŘÍT {asset['name']}", key=f"btn_{asset['sym']}", use_container_width=True):
+                    select_asset(asset['sym'])
+                    st.rerun()
+                    
+    # Tlačítko zavřít dole
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.caption("V28 Pro")
+    if st.button("❌ ZAVŘÍT MENU", type="secondary", use_container_width=True):
+        toggle_menu()
+        st.rerun()
 
-# --- HLAVNÍ OBSAH ---
+    # Zastavíme zbytek skriptu, aby se nenačítal dashboard pod tím
+    st.stop()
+
+# --- UI: DASHBOARD NEBO DETAIL ---
 placeholder = st.empty()
 
 while True:
+    # Pokud je menu otevřené, smyčka stojí (řešeno výše přes st.stop)
+    # Pokud menu není otevřené, běží tohle:
+    
     with placeholder.container():
         
         # === DASHBOARD ===
         if st.session_state.view == 'dashboard':
-            st.title("💸 DASHBOARD (PŘEHLED)")
+            st.title("💸 PŘEHLED TRHŮ")
             cols = st.columns(2)
             
-            for i, asset in enumerate(all_assets):
+            for i, asset in enumerate(assets):
                 with cols[i % 2]: 
                     with st.container(border=True):
                         df = get_data(asset['sym'])
@@ -322,7 +297,6 @@ while True:
                             score, action, color, sl, tp, is_live = analyze_market_balanced(df, asset['sym'])
                             price = df.iloc[-1]['Close']
                             pct_change = df.iloc[-1]['Pct_Change']
-                            
                             change_class = "change-up" if pct_change >= 0 else "change-down"
                             arrow = "▲" if pct_change >= 0 else "▼"
                             change_str = f"{arrow} {abs(pct_change):.2f}%"
@@ -330,7 +304,7 @@ while True:
                             if not is_live:
                                 st.markdown(f"""
                                     <div class="header-flex header-dimmed">
-                                        <div><div class="symbol-title">{asset['name']}</div><div class="symbol-desc">{asset['sym']}</div></div>
+                                        <div><div class="symbol-title">{asset['name']}</div><div class="symbol-desc">{asset['desc']}</div></div>
                                         <div class="price-box"><div class="price-main">{price:.2f}</div><div class="price-change {change_class}">{change_str}</div></div>
                                     </div>
                                     <div class="sleep-overlay"><div class="sleep-emoji">😴</div><div class="sleep-text">TRH ZAVŘENÝ</div></div>
@@ -341,7 +315,7 @@ while True:
 
                                 st.markdown(f"""
                                     <div class="header-flex">
-                                        <div><div class="symbol-title">{asset['name']}</div><div class="symbol-desc">{asset['sym']}</div></div>
+                                        <div><div class="symbol-title">{asset['name']}</div><div class="symbol-desc">{asset['desc']}</div></div>
                                         <div class="price-box"><div class="price-main">{price:.2f}</div><div class="price-change {change_class}">{change_str}</div></div>
                                     </div>
                                     <div class="signal-box" style="background-color: {color}; box-shadow: 0 0 25px {hex_to_rgba(color, 0.4)};">{action}</div>
@@ -367,30 +341,24 @@ while True:
         # === DETAIL ===
         elif st.session_state.view == 'detail':
             sym = st.session_state.selected_asset
-            asset_info = next((a for a in all_assets if a['sym'] == sym), None)
+            asset_info = next((a for a in assets if a['sym'] == sym), None)
             
             if asset_info:
                 st.title(f"🔎 DETAIL: {asset_info['name']}")
                 
-                timestamp = int(time.time())
-                if st.button("⬅️ ZPĚT NA PŘEHLED", key=f"back_btn_{timestamp}"):
-                    set_view('dashboard')
-                    st.rerun()
-
                 df = get_data(sym)
                 if df is not None:
                     score, action, color, sl, tp, is_live = analyze_market_balanced(df, sym)
                     row = df.iloc[-1]
                     price = row['Close']
                     pct_change = row['Pct_Change']
-                    
                     change_class = "change-up" if pct_change >= 0 else "change-down"
                     arrow = "▲" if pct_change >= 0 else "▼"
                     change_str = f"{arrow} {abs(pct_change):.2f}%"
 
                     c1, c2 = st.columns([2, 1])
                     with c1:
-                        st.markdown(f"""<div style="margin-bottom: 20px;"><div class="symbol-title" style="font-size: 50px;">{asset_info['name']}</div><div class="symbol-desc">{sym}</div></div>""", unsafe_allow_html=True)
+                        st.markdown(f"""<div style="margin-bottom: 20px;"><div class="symbol-title" style="font-size: 50px;">{asset_info['name']}</div><div class="symbol-desc">{asset_info['desc']} | {sym}</div></div>""", unsafe_allow_html=True)
                     with c2:
                         st.markdown(f"""<div style="text-align: right;"><div class="price-main" style="font-size: 60px;">{price:.2f}</div><div class="price-change {change_class}" style="font-size: 24px;">{change_str}</div></div>""", unsafe_allow_html=True)
 
@@ -405,31 +373,24 @@ while True:
                         
                         st.markdown("<br>", unsafe_allow_html=True)
                         c_metrics, c_risk, c_gauge = st.columns(3)
-                        
                         with c_metrics:
-                            st.markdown('<div class="metric-clean">', unsafe_allow_html=True)
-                            st.markdown(f'<div class="metric-label-clean">RSI HODNOTA</div><div class="metric-val-clean">{row["RSI"]:.1f}</div>', unsafe_allow_html=True)
-                            st.markdown('<div class="divider-clean"></div>', unsafe_allow_html=True)
-                            st.markdown(f'<div class="metric-label-clean">MACD SÍLA</div><div class="metric-val-clean">{row["MACD"]:.4f}</div>', unsafe_allow_html=True)
+                            st.markdown('<div class="detail-metric-box">', unsafe_allow_html=True)
+                            st.markdown(f'<div class="metric-label">RSI HODNOTA</div><div class="metric-val">{row["RSI"]:.1f}</div>', unsafe_allow_html=True)
+                            st.markdown("<hr style='border-color: #333; margin: 10px 0;'>", unsafe_allow_html=True)
+                            st.markdown(f'<div class="metric-label">MACD SÍLA</div><div class="metric-val">{row["MACD"]:.4f}</div>', unsafe_allow_html=True)
                             st.markdown('</div>', unsafe_allow_html=True)
-                        
                         with c_risk:
                             if "WAIT" in action: sl_c, tp_c = "#666", "#666"
                             else: sl_c, tp_c = "#ff4444", "#00e676"
-                            
-                            st.markdown('<div class="metric-clean">', unsafe_allow_html=True)
-                            st.markdown(f'<div class="metric-label-clean">STOP LOSS</div><div class="metric-val-clean" style="color:{sl_c}">{sl:.2f}</div>', unsafe_allow_html=True)
-                            st.markdown('<div class="divider-clean"></div>', unsafe_allow_html=True)
-                            st.markdown(f'<div class="metric-label-clean">TAKE PROFIT</div><div class="metric-val-clean" style="color:{tp_c}">{tp:.2f}</div>', unsafe_allow_html=True)
+                            st.markdown('<div class="detail-metric-box">', unsafe_allow_html=True)
+                            st.markdown(f'<div class="metric-label">STOP LOSS</div><div class="metric-val" style="color:{sl_c}">{sl:.2f}</div>', unsafe_allow_html=True)
+                            st.markdown("<hr style='border-color: #333; margin: 10px 0;'>", unsafe_allow_html=True)
+                            st.markdown(f'<div class="metric-label">TAKE PROFIT</div><div class="metric-val" style="color:{tp_c}">{tp:.2f}</div>', unsafe_allow_html=True)
                             st.markdown('</div>', unsafe_allow_html=True)
-
                         with c_gauge:
                             fig_g = create_gauge(score, color)
                             st.plotly_chart(fig_g, use_container_width=True, config={'displayModeBar': False})
 
         st.caption(f"Last update: {datetime.now().strftime('%H:%M:%S')}")
     
-    if st.session_state.view == 'dashboard':
-        time.sleep(15)
-    else:
-        time.sleep(5)
+    time.sleep(15)
