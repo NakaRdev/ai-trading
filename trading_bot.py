@@ -8,7 +8,7 @@ from datetime import datetime
 
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="Sniper Bot V18", page_icon="💸", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Sniper Bot V19", page_icon="😴", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 2. CSS ---
 st.markdown("""
@@ -36,18 +36,41 @@ st.markdown("""
     .risk-label { font-size: 11px; color: #666; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
     .risk-val { font-size: 22px; font-weight: bold; font-family: monospace; }
     
-    /* AI Accuracy (SYMETRICKÉ) */
+    /* AI Accuracy */
     .ai-container { 
         margin-top: 15px; 
         text-align: center; 
-        padding-top: 15px;    /* Stejné nahoře */
-        padding-bottom: 15px; /* Stejné dole */
+        padding-top: 15px;    
+        padding-bottom: 15px; 
         border-top: 1px solid #222; 
     }
     .ai-label { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 5px; }
     .ai-score { font-size: 16px; font-weight: 900; color: #fff; }
     .ai-bar-bg { width: 100%; height: 6px; background-color: #222; border-radius: 3px; margin-top: 5px; overflow: hidden; }
     .ai-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease-in-out; }
+
+    /* === NOVÉ: SPÁNEK MODE === */
+    .sleep-overlay {
+        height: 250px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: rgba(20, 20, 20, 0.6); /* Poloprůhledné */
+        border-radius: 10px;
+        border: 1px dashed #333;
+        backdrop-filter: blur(4px); /* Efekt rozmazání pozadí */
+        margin-top: 20px;
+    }
+    .sleep-emoji { font-size: 60px; opacity: 0.8; animation: pulse 3s infinite; }
+    .sleep-text { font-size: 18px; font-weight: 900; color: #666; margin-top: 10px; text-transform: uppercase; letter-spacing: 2px; }
+    .header-dimmed { opacity: 0.3; filter: grayscale(100%); transition: opacity 0.5s; }
+    
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 0.8; }
+        50% { transform: scale(1.1); opacity: 0.5; }
+        100% { transform: scale(1); opacity: 0.8; }
+    }
 
     header {visibility: hidden;}
     </style>
@@ -100,56 +123,47 @@ def get_data(symbol):
     except:
         return None
 
-# --- 5. LOGIKA "BALANCED PROFIT" ---
+# --- 5. LOGIKA "BALANCED" ---
 def analyze_market_balanced(df, symbol):
     row = df.iloc[-1]
     price = row['Close']
     atr = row['ATR']
     
-    # --- LOGIKA PRO VÍKEND (FIX) ---
+    # --- LOGIKA VÍKEND ---
     now = pd.Timestamp.now(tz='Europe/Prague')
-    is_weekend = now.weekday() >= 5 # 5=Sobota, 6=Neděle
+    is_weekend = now.weekday() >= 5 
     is_crypto = "BTC" in symbol
     
-    # Pokud je víkend a NENÍ to krypto -> trh je zavřený
     if is_weekend and not is_crypto:
         is_live = False
     else:
-        # Jinak kontrolujeme stáří dat (pro případ výpadku)
         last_time = row.name
         diff = (now - last_time).total_seconds() / 60
         is_live = diff < 120
 
     score = 50.0
     
-    # 1. TREND (EMA 200) - Základ (20 bodů)
+    # Indikátory
     trend_up = price > row['EMA_200']
     if trend_up: score += 10
     else: score -= 10
 
-    # 2. MACD (Momentum) - Důležité pro agresivitu (20 bodů)
     if row['MACD'] > row['Signal_Line']: score += 10
     else: score -= 10
 
-    # 3. RSI (Chytrý filtr) - Zabrání nákupu na vrcholu (30 bodů)
     rsi = row['RSI']
     if trend_up:
-        if rsi < 50: score += 15    # Dip v trendu = Super nákup
-        elif rsi > 70: score -= 15  # Překoupeno = Nekupuj
+        if rsi < 50: score += 15    
+        elif rsi > 70: score -= 15  
     else:
-        if rsi > 50: score -= 15    # Rally v downtrendu = Prodej
-        elif rsi < 30: score += 15  # Přeprodáno = Neprodávej
+        if rsi > 50: score -= 15    
+        elif rsi < 30: score += 15  
 
-    # 4. Bollinger Bands (Potvrzení) - (20 bodů)
     if price <= row['BB_Lower']: score += 10
     if price >= row['BB_Upper']: score -= 10
 
     score = int(max(0, min(100, score)))
 
-    # --- ROZHODOVÁNÍ (ZLATÁ STŘEDNÍ CESTA) ---
-    # Buy > 60 (Agresivní ale ne hloupé)
-    # Sell < 40
-    
     if score >= 60:
         action = "LONG / KOUPIT 🚀"
         color = "#00e676"
@@ -158,11 +172,6 @@ def analyze_market_balanced(df, symbol):
         color = "#ff4444" 
     else: 
         action = "WAIT / ČEKAT ✋"
-        color = "#CCCCCC"
-
-    if not is_live:
-        action += " (ZAVŘENO 💤)"
-        # Pokud trh spí, zešedíme barvy signálu
         color = "#CCCCCC"
 
     sl = price - (2*atr) if score > 50 else price + (2*atr)
@@ -207,14 +216,13 @@ def create_chart(df, color):
     return fig
 
 # --- 7. MAIN APP ---
-st.title("💸 SNIPER V18 (BALANCED)")
+st.title("💸 SNIPER V19 (WEEKEND MODE)")
 placeholder = st.empty()
 
 while True:
     with placeholder.container():
         cols = st.columns(2)
         
-        # ZMĚNA: CL=F (Ropa) nahrazena BTC-USD (Bitcoin)
         assets = [
             {"sym": "EURUSD=X", "name": "EUR/USD", "desc": "Forex"},
             {"sym": "GBPUSD=X", "name": "GBP/USD", "desc": "Forex"},
@@ -230,7 +238,6 @@ while True:
                     df = get_data(asset['sym'])
                     
                     if df is not None:
-                        # Voláme vyváženou logiku s detekcí víkendu
                         score, action, color, sl, tp, is_live = analyze_market_balanced(df, asset['sym'])
                         
                         price = df.iloc[-1]['Close']
@@ -240,63 +247,87 @@ while True:
                         arrow = "▲" if pct_change >= 0 else "▼"
                         change_str = f"{arrow} {abs(pct_change):.2f}%"
 
-                        if "WAIT" in action or not is_live:
-                            sl_color = "#666"
-                            tp_color = "#666"
+                        # Pokud TRH SPÍ (Není Live)
+                        if not is_live:
+                            # 1. HLAVIČKA (Ztlumená)
+                            st.markdown(f"""
+                                <div class="header-flex header-dimmed">
+                                    <div>
+                                        <div class="symbol-title">{asset['name']}</div>
+                                        <div class="symbol-desc">{asset['desc']}</div>
+                                    </div>
+                                    <div class="price-box">
+                                        <div class="price-main">{price:.2f}</div>
+                                        <div class="price-change {change_class}">{change_str}</div>
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # 2. SPACÍ PŘEKRYV (Místo Grafu a Tlačítek)
+                            st.markdown(f"""
+                                <div class="sleep-overlay">
+                                    <div class="sleep-emoji">😴</div>
+                                    <div class="sleep-text">TRH ZAVŘENÝ</div>
+                                </div>
+                            """, unsafe_allow_html=True)
+
+                        # Pokud TRH ŽIJE (Live)
                         else:
-                            sl_color = "#ff4444"
-                            tp_color = "#00e676"
+                            if "WAIT" in action:
+                                sl_color = "#666"; tp_color = "#666"
+                            else:
+                                sl_color = "#ff4444"; tp_color = "#00e676"
 
-                        # HLAVIČKA
-                        st.markdown(f"""
-                            <div class="header-flex">
-                                <div>
-                                    <div class="symbol-title">{asset['name']}</div>
-                                    <div class="symbol-desc">{asset['desc']}</div>
+                            # 1. HLAVIČKA
+                            st.markdown(f"""
+                                <div class="header-flex">
+                                    <div>
+                                        <div class="symbol-title">{asset['name']}</div>
+                                        <div class="symbol-desc">{asset['desc']}</div>
+                                    </div>
+                                    <div class="price-box">
+                                        <div class="price-main">{price:.2f}</div>
+                                        <div class="price-change {change_class}">{change_str}</div>
+                                    </div>
                                 </div>
-                                <div class="price-box">
-                                    <div class="price-main">{price:.2f}</div>
-                                    <div class="price-change {change_class}">{change_str}</div>
+                            """, unsafe_allow_html=True)
+                            
+                            # 2. SIGNÁL
+                            st.markdown(f"""
+                                <div class="signal-box" style="background-color: {color}; box-shadow: 0 0 25px {hex_to_rgba(color, 0.4)};">
+                                    {action}
                                 </div>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # SIGNÁL
-                        st.markdown(f"""
-                            <div class="signal-box" style="background-color: {color}; box-shadow: 0 0 25px {hex_to_rgba(color, 0.4)};">
-                                {action}
-                            </div>
-                        """, unsafe_allow_html=True)
+                            """, unsafe_allow_html=True)
 
-                        # GRAF
-                        chart_key = f"chart_{asset['sym']}_{int(time.time())}"
-                        fig = create_chart(df, color)
-                        st.plotly_chart(fig, config={'displayModeBar': False}, key=chart_key, use_container_width=True)
+                            # 3. GRAF
+                            chart_key = f"chart_{asset['sym']}_{int(time.time())}"
+                            fig = create_chart(df, color)
+                            st.plotly_chart(fig, config={'displayModeBar': False}, key=chart_key, use_container_width=True)
 
-                        # RISK MANAGEMENT
-                        st.markdown(f"""
-                            <div class="risk-wrapper">
-                                <div class="risk-col">
-                                    <span class="risk-label">STOP LOSS</span>
-                                    <span class="risk-val" style="color: {sl_color}">{sl:.2f}</span>
+                            # 4. RISK
+                            st.markdown(f"""
+                                <div class="risk-wrapper">
+                                    <div class="risk-col">
+                                        <span class="risk-label">STOP LOSS</span>
+                                        <span class="risk-val" style="color: {sl_color}">{sl:.2f}</span>
+                                    </div>
+                                    <div class="risk-col" style="text-align: right;">
+                                        <span class="risk-label">TAKE PROFIT</span>
+                                        <span class="risk-val" style="color: {tp_color}">{tp:.2f}</span>
+                                    </div>
                                 </div>
-                                <div class="risk-col" style="text-align: right;">
-                                    <span class="risk-label">TAKE PROFIT</span>
-                                    <span class="risk-val" style="color: {tp_color}">{tp:.2f}</span>
+                            """, unsafe_allow_html=True)
+                            
+                            # 5. AI
+                            st.markdown(f"""
+                                <div class="ai-container">
+                                    <div class="ai-label">AI PŘESNOST</div>
+                                    <div class="ai-score">{score}%</div>
+                                    <div class="ai-bar-bg">
+                                        <div class="ai-bar-fill" style="width: {score}%; background-color: {color}; box-shadow: 0 0 10px {color};"></div>
+                                    </div>
                                 </div>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # AI PŘESNOST
-                        st.markdown(f"""
-                            <div class="ai-container">
-                                <div class="ai-label">AI PŘESNOST</div>
-                                <div class="ai-score">{score}%</div>
-                                <div class="ai-bar-bg">
-                                    <div class="ai-bar-fill" style="width: {score}%; background-color: {color}; box-shadow: 0 0 10px {color};"></div>
-                                </div>
-                            </div>
-                        """, unsafe_allow_html=True)
+                            """, unsafe_allow_html=True)
 
                     else:
                         st.warning(f"Načítám {asset['name']}...")
