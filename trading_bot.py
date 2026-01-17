@@ -7,66 +7,87 @@ import warnings
 import os
 from datetime import datetime
 
-# --- 1. NASTAVENÍ APLIKACE ---
+# --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="Sniper Bot CZ Pro", page_icon="🎯", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Sniper Bot V10", page_icon="💀", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. CSS STYLING (Neonový vzhled) ---
+# --- 2. CSS - CLEAN & BIG UI ---
 st.markdown("""
     <style>
-    /* Pozadí a fonty */
-    .stApp { background-color: #080808; color: #e0e0e0; font-family: 'Roboto', sans-serif; }
+    /* Reset */
+    .stApp { background-color: #000000; font-family: 'Helvetica Neue', sans-serif; }
     
-    /* Karty pro páry */
-    div[data-testid="stVerticalBlock"] > div > div {
-        background-color: #121212; 
-        border: 1px solid #333;
-        border-radius: 10px;
-        padding: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    /* Odstranění mezer ve Streamlitu */
+    .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+    div[data-testid="stVerticalBlock"] { gap: 1rem; }
+    
+    /* KARTA PÁRU (Bez rámečků Streamlitu) */
+    .crypto-card {
+        background-color: #111;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border-left: 5px solid #333; /* Default border */
     }
     
-    /* Nadpisy */
-    .pair-name { font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 0; letter-spacing: 1px; }
-    .pair-desc { font-size: 12px; color: #888; margin-bottom: 10px; text-transform: uppercase; }
-    
-    /* Cena */
-    .price-big { font-size: 32px; font-weight: 700; color: #fff; font-family: 'Courier New', monospace; letter-spacing: -1px; }
-    
-    /* Signály - Neonové efekty */
-    .signal-box {
-        text-align: center; padding: 8px; border-radius: 6px; margin: 10px 0;
-        font-weight: 800; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;
-    }
-    .sig-buy { background: rgba(0, 255, 65, 0.1); color: #00ff41; border: 1px solid #00ff41; box-shadow: 0 0 10px rgba(0, 255, 65, 0.2); }
-    .sig-sell { background: rgba(255, 43, 43, 0.1); color: #ff2b2b; border: 1px solid #ff2b2b; box-shadow: 0 0 10px rgba(255, 43, 43, 0.2); }
-    .sig-wait { background: #222; color: #666; border: 1px dashed #444; }
-    
-    /* Risk Management Texty */
-    .risk-row { display: flex; justify-content: space-between; font-size: 12px; margin-top: 5px; font-family: monospace; }
-    .sl-val { color: #ff5252; }
-    .tp-val { color: #69f0ae; }
-    
-    /* Skrytí defaultních Streamlit elementů */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    </style>
-    """, unsafe_allow_html=True)
+    /* Hlavní Info: Název a Cena */
+    .card-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
+    .symbol-text { font-size: 24px; font-weight: 900; color: #fff; margin: 0; line-height: 1; }
+    .desc-text { font-size: 14px; color: #666; font-weight: 500; text-transform: uppercase; }
+    .price-text { font-size: 36px; font-weight: 700; color: #fff; font-family: monospace; line-height: 1; }
 
-# --- 3. DATA ENGINE ---
-@st.cache_data(ttl=45, show_spinner=False)
+    /* Signál - Velký a jasný */
+    .signal-badge {
+        display: block;
+        text-align: center;
+        font-size: 22px;
+        font-weight: 900;
+        padding: 12px;
+        border-radius: 8px;
+        margin: 15px 0;
+        text-transform: uppercase;
+        color: #000; /* Černý text pro kontrast */
+    }
+    
+    /* Risk Management - Velké písmo */
+    .risk-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        margin-top: 15px;
+        background: #1a1a1a;
+        padding: 10px;
+        border-radius: 8px;
+    }
+    .risk-item { display: flex; flex-direction: column; }
+    .risk-label { font-size: 12px; color: #888; text-transform: uppercase; font-weight: bold; }
+    .risk-value { font-size: 18px; font-family: monospace; font-weight: bold; }
+    
+    .sl-color { color: #ff4444; }
+    .tp-color { color: #00e676; }
+
+    </style>
+""", unsafe_allow_html=True)
+
+# --- 3. POMOCNÉ FUNKCE ---
+def hex_to_rgba(hex_color, alpha=0.2):
+    """Převede HEX barvu na RGBA pro Plotly"""
+    hex_color = hex_color.lstrip('#')
+    return f"rgba({int(hex_color[0:2], 16)}, {int(hex_color[2:4], 16)}, {int(hex_color[4:6], 16)}, {alpha})"
+
+# --- 4. DATA ENGINE ---
+@st.cache_data(ttl=30, show_spinner=False)
 def get_data(symbol):
     try:
         ticker = yf.Ticker(symbol)
         df = ticker.history(period="5d", interval="15m")
         
         if df.empty or len(df) < 50: return None
-            
-        # Timezone fix pro Prahu
+        
         if df.index.tzinfo is None: df.index = df.index.tz_localize('UTC')
         df.index = df.index.tz_convert('Europe/Prague')
 
-        # Výpočet indikátorů
+        # Indikátory
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
         
         # RSI
@@ -76,102 +97,87 @@ def get_data(symbol):
         rs = gain / loss
         df['RSI'] = 100 - (100 / (1 + rs))
 
-        # Bollinger Bands
+        # BB
         df['SMA_20'] = df['Close'].rolling(20).mean()
         df['STD_20'] = df['Close'].rolling(20).std()
         df['BB_Upper'] = df['SMA_20'] + (df['STD_20'] * 2)
         df['BB_Lower'] = df['SMA_20'] - (df['STD_20'] * 2)
 
-        # ATR (Risk)
+        # ATR
         df['ATR'] = (df['High'] - df['Low']).rolling(14).mean()
 
         return df
     except:
         return None
 
-# --- 4. LOGIKA ANALÝZY ---
+# --- 5. LOGIKA ---
 def analyze_market(df):
     row = df.iloc[-1]
     price = row['Close']
     atr = row['ATR']
     
-    # 1. Časová kontrola
+    # Čas
     last_time = row.name
     now = pd.Timestamp.now(tz='Europe/Prague')
     diff = (now - last_time).total_seconds() / 60
-    is_weekend = now.weekday() >= 5
-    # Tolerance 90 minut (kvůli zpoždění Yahoo) nebo víkend
-    is_live = diff < 90 or is_weekend 
+    is_live = diff < 120 or now.weekday() >= 5 # Větší tolerance
 
-    if not is_live:
-        return 50, "OFFLINE", "Trh zavřený", 0, 0, False
-
-    # 2. Bodování (0-100)
     score = 50
-    reasons = []
     
     # Trend
-    trend = "UP" if price > row['EMA_200'] else "DOWN"
-    score += 10 if trend == "UP" else -10
+    trend_up = price > row['EMA_200']
+    score += 10 if trend_up else -10
 
-    # RSI & BB
-    if trend == "UP":
-        if row['RSI'] < 45: score += 15 # Pullback
-        if price <= row['BB_Lower'] * 1.001: score += 20 # Dotek spodního pásma
+    # Logika
+    if trend_up:
+        if row['RSI'] < 45: score += 15
+        if price <= row['BB_Lower']: score += 20
     else:
         if row['RSI'] > 55: score -= 15
-        if price >= row['BB_Upper'] * 0.999: score -= 20
+        if price >= row['BB_Upper']: score -= 20
 
     score = max(0, min(100, score))
 
-    # 3. Akce
-    if score >= 60: action = "LONG (Koupit)"
-    elif score <= 40: action = "SHORT (Prodat)"
-    else: action = "WAIT (Čekat)"
+    if score >= 60: 
+        action = "LONG / KOUPIT 🚀"
+        color = "#00e676" # Zelená
+        bg_color = "#00e676"
+    elif score <= 40: 
+        action = "SHORT / PRODAT 📉"
+        color = "#ff4444" # Červená
+        bg_color = "#ff4444"
+    else: 
+        action = "WAIT / ČEKAT ✋"
+        color = "#888888" # Šedá
+        bg_color = "#333333"
 
-    # 4. SL / TP
     sl = price - (2*atr) if score > 50 else price + (2*atr)
     tp = price + (3*atr) if score > 50 else price - (3*atr)
 
-    return score, action, reasons, sl, tp, is_live
+    return score, action, color, bg_color, sl, tp, is_live
 
-# --- 5. VYKRESLENÍ GRAFU (OPRAVENO) ---
-def create_chart(df, score):
-    # Barva grafu podle signálu
-    if score >= 55: main_color = '#00ff41' # Zelená
-    elif score <= 45: main_color = '#ff2b2b' # Červená
-    else: main_color = '#888888' # Šedá
-
-    # OPRAVA: Převedeme HEX barvu na RGBA pro průhlednost
-    h = main_color.lstrip('#')
-    try:
-        rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
-        fill_color_rgba = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.1)" # 0.1 je průhlednost
-    except:
-        fill_color_rgba = "rgba(100, 100, 100, 0.1)" # Záložní barva
-
-    subset = df.tail(40) # Posledních 40 svíček
+# --- 6. GRAF (PLOTLY) ---
+def create_chart(df, color):
+    subset = df.tail(50) # Více svíček
     
     fig = go.Figure()
 
-    # Hlavní cena (Line s výplní)
+    # Linka
     fig.add_trace(go.Scatter(
         x=subset.index, y=subset['Close'],
         mode='lines',
-        line=dict(color=main_color, width=2),
-        fill='tozeroy', 
-        fillcolor=fill_color_rgba, # Zde byla chyba, teď je to OK
-        name='Cena'
+        line=dict(color=color, width=3),
+        fill='tozeroy',
+        fillcolor=hex_to_rgba(color, 0.1), # Správná průhlednost
     ))
 
-    # Bollinger Bands (jemné linky)
-    fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Upper'], line=dict(color='rgba(255,255,255,0.15)', width=1), hoverinfo='skip'))
-    fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Lower'], line=dict(color='rgba(255,255,255,0.15)', width=1), hoverinfo='skip'))
+    # Bollinger Bands
+    fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Upper'], line=dict(color='rgba(255,255,255,0.1)', width=1), hoverinfo='skip'))
+    fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Lower'], line=dict(color='rgba(255,255,255,0.1)', width=1), hoverinfo='skip'))
 
-    # Design grafu (Minimalistický "Sniper" styl)
     fig.update_layout(
         margin=dict(l=0, r=0, t=10, b=0),
-        height=80, # Výška grafu
+        height=180, # VĚTŠÍ VÝŠKA GRAFU
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         xaxis=dict(showgrid=False, showticklabels=False, fixedrange=True),
@@ -181,83 +187,74 @@ def create_chart(df, score):
     )
     return fig
 
-# --- 6. MAIN LOOP ---
-st.title("🎯 SNIPER TRADING CZ")
-st.caption("AI Analýza trhu v reálném čase")
-
+# --- 7. APP ---
+st.title("🎯 SNIPER TRADING V10")
 placeholder = st.empty()
 
 while True:
     with placeholder.container():
-        st.write(f"⏱️ Aktualizováno: **{datetime.now().strftime('%H:%M:%S')}**")
         
-        # Grid 3 sloupce
-        cols = st.columns(3)
+        # Změna: 2 Sloupce pro více místa
+        cols = st.columns(2)
         
         assets = [
-            {"sym": "EURUSD=X", "name": "EUR / USD", "desc": "Forex"},
-            {"sym": "GBPUSD=X", "name": "GBP / USD", "desc": "Forex"},
-            {"sym": "JPY=X", "name": "USD / JPY", "desc": "Forex"},
-            {"sym": "GC=F", "name": "ZLATO (Gold)", "desc": "Komodity"},
-            {"sym": "CL=F", "name": "ROPA (Oil)", "desc": "Komodity"},
-            {"sym": "ES=F", "name": "S&P 500", "desc": "Indexy Futures"},
-            {"sym": "BTC-USD", "name": "BITCOIN", "desc": "Krypto"},
-            {"sym": "ETH-USD", "name": "ETHEREUM", "desc": "Krypto"},
+            {"sym": "EURUSD=X", "name": "EUR/USD", "desc": "Forex"},
+            {"sym": "GBPUSD=X", "name": "GBP/USD", "desc": "Forex"},
+            {"sym": "JPY=X", "name": "USD/JPY", "desc": "Forex"},
+            {"sym": "GC=F", "name": "GOLD", "desc": "Zlato"},
+            {"sym": "CL=F", "name": "OIL", "desc": "Ropa"},
+            {"sym": "ES=F", "name": "S&P 500", "desc": "Futures"},
         ]
 
-        # Rozdělení do sloupců
         for i, asset in enumerate(assets):
-            col_idx = i % 3
-            with cols[col_idx]:
+            with cols[i % 2]: # Střídání sloupců
                 df = get_data(asset['sym'])
                 
                 if df is not None:
-                    score, action, reasons, sl, tp, is_live = analyze_market(df)
+                    score, action, color, bg_color, sl, tp, is_live = analyze_market(df)
                     price = df.iloc[-1]['Close']
                     
-                    with st.container():
-                        # Hlavička karty
+                    # --- HTML CARD ---
+                    # Vykreslujeme celý box pomocí HTML, aby to vypadalo celistvě
+                    st.markdown(f"""
+                    <div class="crypto-card" style="border-left: 5px solid {color};">
+                        <div class="card-header">
+                            <div>
+                                <div class="symbol-text">{asset['name']}</div>
+                                <div class="desc-text">{asset['desc']}</div>
+                            </div>
+                            <div class="price-text">{price:.2f}</div>
+                        </div>
+                        
+                        <div class="signal-badge" style="background-color: {bg_color}; box-shadow: 0 0 20px {hex_to_rgba(color, 0.4)};">
+                            {action}
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # --- PLOTLY GRAF (Větší) ---
+                    fig = create_chart(df, color)
+                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                    
+                    # --- RISK MANAGEMENT (HTML) ---
+                    if is_live and score != 50:
                         st.markdown(f"""
-                        <div>
-                            <div class="pair-name">{asset['name']}</div>
-                            <div class="pair-desc">{asset['desc']}</div>
-                            <div class="price-big">{price:.2f}</div>
+                        <div class="risk-grid">
+                            <div class="risk-item">
+                                <span class="risk-label">STOP LOSS 🛑</span>
+                                <span class="risk-value sl-color">{sl:.2f}</span>
+                            </div>
+                            <div class="risk-item" style="text-align: right;">
+                                <span class="risk-label">TAKE PROFIT 🎯</span>
+                                <span class="risk-value tp-color">{tp:.2f}</span>
+                            </div>
                         </div>
                         """, unsafe_allow_html=True)
-
-                        # Signál Box
-                        if not is_live:
-                            st.markdown('<div class="signal-box sig-wait">TRH SPÍ 💤</div>', unsafe_allow_html=True)
-                        elif "LONG" in action:
-                            st.markdown(f'<div class="signal-box sig-buy">{action} 🚀</div>', unsafe_allow_html=True)
-                        elif "SHORT" in action:
-                            st.markdown(f'<div class="signal-box sig-sell">{action} 📉</div>', unsafe_allow_html=True)
-                        else:
-                            st.markdown(f'<div class="signal-box sig-wait">{action} ✋</div>', unsafe_allow_html=True)
-
-                        # Progress Bar (Síla signálu)
-                        color = "#00ff41" if score > 50 else "#ff2b2b"
-                        st.progress(score)
-                        st.caption(f"🔮 Síla signálu: {score}%")
-
-                        # Risk Management (jen pokud je akce)
-                        if is_live and "WAIT" not in action:
-                            st.markdown(f"""
-                            <div class="risk-row">
-                                <span class="sl-val">🛑 SL: {sl:.2f}</span>
-                                <span class="tp-val">🎯 TP: {tp:.2f}</span>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                             st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
-
-                        # --- GRAF ZPĚT ZDE ---
-                        fig = create_chart(df, score)
-                        st.plotly_chart(fig, config={'displayModeBar': False}, key=f"g_{asset['sym']}_{time.time()}")
-                        
-                        st.divider()
-
+                    
+                    # Uzavření divu karty
+                    st.markdown("</div>", unsafe_allow_html=True)
                 else:
                     st.warning(f"Načítám {asset['name']}...")
 
+        st.caption(f"Last update: {datetime.now().strftime('%H:%M:%S')}")
+    
     time.sleep(15)
