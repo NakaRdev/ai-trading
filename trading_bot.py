@@ -5,11 +5,11 @@ import plotly.graph_objects as go
 import time
 import warnings
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # --- PRO OPRAVU YFINANCE (Session & Caching) ---
 from requests import Session
-from requests_cache import CacheMixin, SQLiteCache
+from requests_cache import CacheMixin
 from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
 from pyrate_limiter import Duration, RequestRate, Limiter
 
@@ -20,16 +20,19 @@ os.environ["STREAMLIT_SILENCE_DEPRECATION_WARNINGS"] = "1"
 st.set_page_config(page_title="Trading Sniper PRO v6", page_icon="🎯", layout="wide", initial_sidebar_state="collapsed")
 
 # Nastavení "Smart Session" pro Yahoo Finance
-# Toto zabrání blokování IP adresy tím, že omezí rychlost dotazů a ukládá data do cache
+# Používáme backend='memory', aby se data neukládala do souboru (což na Cloudu zlobí)
 class CachedLimiterSession(CacheMixin, LimiterMixin, Session):
     pass
 
-# Limit: Max 2 dotazy za 5 sekund (Yahoo je citlivé)
 session = CachedLimiterSession(
-    limiter=Limiter(RequestRate(2, Duration.SECOND*5)),
+    limiter=Limiter(RequestRate(2, Duration.SECOND*5)), # Max 2 dotazy za 5 sekund
     bucket_class=MemoryQueueBucket,
-    backend=SQLiteCache("yfinance.cache", expire_after=60), # Cache platí 60 sekund
+    backend='memory', # DŮLEŽITÉ: Ukládáme jen do RAM
+    expire_after=60,  # Cache platí 60 sekund
 )
+
+# DŮLEŽITÉ: Přidáme hlavičku prohlížeče, aby nás Yahoo neblokovalo
+session.headers['User-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
 # --- 2. CSS STYLING ---
 st.markdown("""
@@ -79,7 +82,8 @@ def get_market_data(symbol):
         ticker = yf.Ticker(symbol, session=session)
         df = ticker.history(period="5d", interval="15m")
         
-        if df.empty or len(df) < 50: return None, None
+        if df.empty or len(df) < 50: 
+            return None, None
             
         # TIMEZONE FIX
         if df.index.tzinfo is None: df.index = df.index.tz_localize('UTC')
@@ -119,7 +123,7 @@ def get_market_data(symbol):
 
         return df.iloc[-1], df
     except Exception as e:
-        # st.error(f"Chyba dat: {e}") 
+        st.error(f"Chyba u {symbol}: {e}") # Zobrazí chybu na obrazovce
         return None, None
 
 def analyze_logic_smart(row):
@@ -129,11 +133,11 @@ def analyze_logic_smart(row):
     score = 50.0 
     reasons = []
     
-    # Časová kontrola (tolerance 60 min kvůli zpoždění Yahoo)
+    # Časová kontrola (tolerance 65 min kvůli zpoždění Yahoo)
     last_time = row.name
     now = pd.Timestamp.now(tz='Europe/Prague')
     diff = (now - last_time).total_seconds() / 60
-    is_open = diff < 65 
+    is_open = diff < 70 # Zvýšena tolerance
 
     if not is_open:
         return 50, False, "NEZNÁMÝ", [], 0.0, 0.0
@@ -157,7 +161,6 @@ def analyze_logic_smart(row):
         score -= 5
 
     # 2. RSI + BOLLINGER BANDS KOMBO (Sniper Vstupy)
-    # Hledáme odrazy od pásem ve směru trendu
     
     if main_trend == "UP":
         # Cena je dole (sleva) v rostoucím trendu
@@ -215,7 +218,7 @@ def analyze_logic_smart(row):
 
 # --- 4. MAIN APP ---
 st.title("🎯 Trading Sniper PRO v6.0")
-st.markdown("#### ⚡ Data Engine: YFinance Smart-Session")
+st.markdown("#### ⚡ Data Engine: YFinance Smart-Session (RAM Mode)")
 
 placeholder = st.empty()
 
@@ -343,9 +346,9 @@ while True:
                         st.plotly_chart(fig, config={'displayModeBar': False}, key=f"g_{item['sym']}_{refresh_id}")
 
                     else:
-                        st.warning("Načítám nebo chyba dat...")
+                        st.warning(f"Data pro {item['name']} nedostupná.")
 
         st.divider()
-        st.caption("Auto-refresh 15s. Používá Smart-Session pro Yahoo Finance.")
+        st.caption("Auto-refresh 15s. Powered by Python & Yahoo Smart-Session.")
 
     time.sleep(15)
