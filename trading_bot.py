@@ -8,9 +8,9 @@ from datetime import datetime
 
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="Sniper Bot V12", page_icon="💣", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Sniper Bot V13", page_icon="🤖", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. CSS (Větší fonty, lepší layout) ---
+# --- 2. CSS (FIXED LAYOUT & AI BAR) ---
 st.markdown("""
     <style>
     /* Globální reset */
@@ -25,11 +25,9 @@ st.markdown("""
         margin-bottom: 10px;
     }
     
-    /* Levá strana: Název */
     .symbol-title { font-size: 28px; font-weight: 900; color: #fff; line-height: 1; }
     .symbol-desc { font-size: 14px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
     
-    /* Pravá strana: Cena a Změna */
     .price-box { text-align: right; }
     .price-main { font-size: 38px; font-weight: 700; color: #fff; font-family: monospace; line-height: 1; text-shadow: 0 0 10px rgba(255,255,255,0.1); }
     .price-change { font-size: 16px; font-weight: bold; margin-top: 5px; }
@@ -42,14 +40,14 @@ st.markdown("""
         padding: 15px;
         border-radius: 8px;
         font-weight: 900;
-        font-size: 20px; /* Větší font */
+        font-size: 20px;
         text-transform: uppercase;
         margin: 15px 0;
         color: #000;
         letter-spacing: 1px;
     }
     
-    /* === RISK MANAGEMENT (Oprava vylézání) === */
+    /* === RISK MANAGEMENT (FIX: BOX-SIZING) === */
     .risk-wrapper {
         display: flex;
         justify-content: space-between;
@@ -58,17 +56,59 @@ st.markdown("""
         border-radius: 8px;
         padding: 15px;
         margin-top: 15px;
-        width: 100%; /* Aby nevylézal */
-        box-sizing: border-box; /* Započítat padding do šířky */
+        
+        /* TOTO OPRAVUJE VYLÉZÁNÍ Z RÁMEČKU: */
+        width: 100%; 
+        box-sizing: border-box !important; 
     }
     
     .risk-col { display: flex; flex-direction: column; }
-    .risk-label { font-size: 12px; color: #666; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-    .risk-val { font-size: 20px; font-weight: bold; font-family: monospace; } /* Větší čísla */
+    .risk-label { font-size: 11px; color: #666; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+    .risk-val { font-size: 22px; font-weight: bold; font-family: monospace; }
     
     .sl-text { color: #ff4444; text-shadow: 0 0 10px rgba(255, 68, 68, 0.2); }
     .tp-text { color: #00e676; text-shadow: 0 0 10px rgba(0, 230, 118, 0.2); }
     
+    /* === AI ACCURACY (NOVÉ) === */
+    .ai-container {
+        margin-top: 15px;
+        text-align: center;
+        padding-top: 10px;
+        border-top: 1px solid #222;
+    }
+    
+    .ai-label {
+        font-size: 12px;
+        color: #aaa;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin-bottom: 5px;
+    }
+    
+    .ai-score {
+        font-size: 18px;
+        font-weight: 900;
+        color: #fff;
+    }
+    
+    /* Progress Bar Pozadí */
+    .ai-bar-bg {
+        width: 100%;
+        height: 6px;
+        background-color: #222;
+        border-radius: 3px;
+        margin-top: 8px;
+        overflow: hidden;
+    }
+    
+    /* Progress Bar Výplň */
+    .ai-bar-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 1s ease-in-out;
+    }
+
     /* Skrytí elementů */
     header {visibility: hidden;}
     </style>
@@ -91,13 +131,12 @@ def get_data(symbol):
         if df.index.tzinfo is None: df.index = df.index.tz_localize('UTC')
         df.index = df.index.tz_convert('Europe/Prague')
 
-        # Výpočet změny za posledních 24h (cca 96 svíček po 15min)
-        # Pokud není dost dat, vezmeme začátek datasetu
+        # Změna ceny
         lookback = 96 if len(df) > 96 else len(df) - 1
         open_price_24h = df['Close'].iloc[-lookback]
         current_price = df['Close'].iloc[-1]
         pct_change = ((current_price - open_price_24h) / open_price_24h) * 100
-        df['Pct_Change'] = pct_change # Uložíme do DF pro pozdější použití
+        df['Pct_Change'] = pct_change
 
         # Indikátory
         df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
@@ -160,13 +199,12 @@ def analyze_market(df):
 
 # --- 6. GRAF (ZOOM FIX) ---
 def create_chart(df, color):
-    subset = df.tail(50) # Posledních 50 svíček
+    subset = df.tail(50)
     
-    # === FIX: Výpočet rozsahu osy Y pro Zoom ===
     y_min = subset['Close'].min()
     y_max = subset['Close'].max()
-    padding = (y_max - y_min) * 0.1 # 10% odsazení
-    if padding == 0: padding = y_max * 0.01 # Ochrana proti nulovému rozsahu
+    padding = (y_max - y_min) * 0.1
+    if padding == 0: padding = y_max * 0.01
 
     fig = go.Figure()
 
@@ -179,29 +217,24 @@ def create_chart(df, color):
         fillcolor=hex_to_rgba(color, 0.15),
     ))
 
-    # Bollinger Bands
+    # BB
     fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Upper'], line=dict(color='rgba(255,255,255,0.05)', width=1), hoverinfo='skip'))
     fig.add_trace(go.Scatter(x=subset.index, y=subset['BB_Lower'], line=dict(color='rgba(255,255,255,0.05)', width=1), hoverinfo='skip'))
 
     fig.update_layout(
         margin=dict(l=0, r=0, t=10, b=10),
-        height=200, # Vyšší graf
+        height=200,
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         xaxis=dict(showgrid=False, showticklabels=False, fixedrange=True),
-        yaxis=dict(
-            showgrid=False, 
-            showticklabels=False, 
-            fixedrange=True,
-            range=[y_min - padding, y_max + padding] # === TOTO OPRAVUJE "ROVNÉ" GRAFY ===
-        ),
+        yaxis=dict(showgrid=False, showticklabels=False, fixedrange=True, range=[y_min - padding, y_max + padding]),
         showlegend=False,
         hovermode="x unified"
     )
     return fig
 
 # --- 7. MAIN APP ---
-st.title("💣 SNIPER TRADING V12")
+st.title("🤖 SNIPER TRADING V13")
 placeholder = st.empty()
 
 while True:
@@ -227,12 +260,11 @@ while True:
                         price = df.iloc[-1]['Close']
                         pct_change = df.iloc[-1]['Pct_Change']
                         
-                        # Určení barvy změny a šipky
                         change_class = "change-up" if pct_change >= 0 else "change-down"
                         arrow = "▲" if pct_change >= 0 else "▼"
                         change_str = f"{arrow} {abs(pct_change):.2f}%"
 
-                        # 1. HLAVIČKA + INFO VPRAVO NAHOŘE
+                        # 1. HLAVIČKA
                         st.markdown(f"""
                             <div class="header-flex">
                                 <div>
@@ -246,20 +278,19 @@ while True:
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # 2. SIGNÁL BUTTON
+                        # 2. SIGNÁL
                         st.markdown(f"""
                             <div class="signal-box" style="background-color: {color}; box-shadow: 0 0 25px {hex_to_rgba(color, 0.4)};">
                                 {action}
                             </div>
                         """, unsafe_allow_html=True)
 
-                        # 3. GRAF (S opraveným Zoomem)
+                        # 3. GRAF
                         chart_key = f"chart_{asset['sym']}_{int(time.time())}"
                         fig = create_chart(df, color)
-                        # Použijeme width="stretch" pro plnou šířku
-                        st.plotly_chart(fig, config={'displayModeBar': False}, key=chart_key)
+                        st.plotly_chart(fig, config={'displayModeBar': False}, key=chart_key, use_container_width=True)
 
-                        # 4. RISK MANAGEMENT (FIXED LAYOUT)
+                        # 4. RISK MANAGEMENT (FIXNÍ)
                         if is_live and score != 50:
                             st.markdown(f"""
                                 <div class="risk-wrapper">
@@ -273,6 +304,18 @@ while True:
                                     </div>
                                 </div>
                             """, unsafe_allow_html=True)
+                            
+                            # 5. AI ACCURACY (NOVÉ - Pod SL/TP)
+                            st.markdown(f"""
+                                <div class="ai-container">
+                                    <div class="ai-label">🤖 AI PŘESNOST</div>
+                                    <div class="ai-score">{score}%</div>
+                                    <div class="ai-bar-bg">
+                                        <div class="ai-bar-fill" style="width: {score}%; background-color: {color}; box-shadow: 0 0 10px {color};"></div>
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+
                         else:
                              st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
