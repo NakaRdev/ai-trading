@@ -9,10 +9,10 @@ from datetime import datetime
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
 st.set_page_config(
-    page_title="Sniper Bot V24", 
+    page_title="Sniper Bot V25", 
     page_icon="💸", 
     layout="wide", 
-    initial_sidebar_state="expanded" # Sidebar bude otevřený po startu
+    initial_sidebar_state="expanded"
 )
 
 # --- 2. SESSION STATE ---
@@ -21,27 +21,18 @@ if 'view' not in st.session_state:
 if 'selected_asset' not in st.session_state:
     st.session_state.selected_asset = 'BTC-USD'
 
-# --- 3. CSS (CLEAN & STABLE) ---
+# --- 3. CSS (FIXED FRAMES & METRICS) ---
 st.markdown("""
     <style>
-    /* 1. Hlavní barvy a fonty */
+    /* Globální */
     .stApp { background-color: #050505; font-family: 'Helvetica Neue', sans-serif; }
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
     
-    /* 2. Úprava Sidebaru (Bezpečně) */
-    [data-testid="stSidebar"] {
-        background-color: #0a0a0a;
-        border-right: 1px solid #333;
-    }
-    
-    /* 3. Úprava Horní lišty (Aby nerušila, ale tlačítka zůstala) */
-    header[data-testid="stHeader"] {
-        background-color: transparent;
-    }
-    
-    /* Zmenšení mezer nahoře */
-    .block-container { padding-top: 2rem; padding-bottom: 2rem; }
+    /* Sidebar */
+    [data-testid="stSidebar"] { background-color: #0a0a0a; border-right: 1px solid #333; }
+    header[data-testid="stHeader"] { background-color: transparent; }
 
-    /* === DASHBOARD KARTY === */
+    /* DASHBOARD STYLES */
     .header-flex { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
     .symbol-title { font-size: 28px; font-weight: 900; color: #fff; line-height: 1; }
     .symbol-desc { font-size: 14px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
@@ -64,12 +55,25 @@ st.markdown("""
     .ai-bar-bg { width: 100%; height: 6px; background-color: #222; border-radius: 3px; margin-top: 5px; overflow: hidden; }
     .ai-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease-in-out; }
 
-    /* DETAIL STYLES */
-    .detail-metric-box { background: #111; padding: 15px; border-radius: 10px; border: 1px solid #333; text-align: center; height: 100%; }
-    .metric-label { color: #888; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
-    .metric-val { color: #fff; font-size: 24px; font-weight: 900; font-family: monospace; }
+    /* === DETAIL PAGE FIX === */
+    /* Roztáhne boxy na plnou šířku a vycentruje obsah */
+    .detail-metric-box { 
+        background: #111; 
+        padding: 20px; 
+        border-radius: 10px; 
+        border: 1px solid #333; 
+        text-align: center; 
+        width: 100%; 
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 140px; /* Fixní minimální výška pro sjednocení */
+    }
+    .metric-label { color: #888; font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
+    .metric-val { color: #fff; font-size: 32px; font-weight: 900; font-family: monospace; }
 
-    /* SPÁNEK MODE (FIXED HEIGHT) */
+    /* Sleep Mode */
     .sleep-overlay {
         height: 470px; display: flex; flex-direction: column; justify-content: center; align-items: center;
         background: rgba(20, 20, 20, 0.6); border-radius: 10px; border: 1px dashed #333;
@@ -79,27 +83,11 @@ st.markdown("""
     .sleep-text { font-size: 24px; font-weight: 900; color: #444; text-transform: uppercase; letter-spacing: 4px; }
     .header-dimmed { opacity: 0.4; filter: grayscale(100%); transition: opacity 0.5s; }
     
-    @keyframes pulse {
-        0% { transform: scale(1); opacity: 0.8; }
-        50% { transform: scale(1.1); opacity: 0.5; }
-        100% { transform: scale(1); opacity: 0.8; }
-    }
+    @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 0.5; } 100% { transform: scale(1); opacity: 0.8; } }
     
-    /* Stylování tlačítek v Sidebaru */
-    .stButton button {
-        width: 100%;
-        border-radius: 5px;
-        font-weight: bold;
-        border: 1px solid #333;
-        background: #151515;
-        color: white;
-        transition: 0.3s;
-    }
-    .stButton button:hover {
-        border-color: #00e676;
-        color: #00e676;
-        background: #1a1a1a;
-    }
+    /* Tlačítka */
+    .stButton button { width: 100%; border-radius: 5px; font-weight: bold; border: 1px solid #333; background: #151515; color: white; transition: 0.3s; }
+    .stButton button:hover { border-color: #00e676; color: #00e676; background: #1a1a1a; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -221,11 +209,10 @@ assets = [
     {"sym": "ES=F", "name": "S&P 500", "desc": "Futures"},
 ]
 
-# --- SIDEBAR MENU (STANDARDNÍ, BEZPEČNÉ) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.title("👽 MENU")
     
-    # Funkce pro přepínání
     def set_view(v, s=None):
         st.session_state.view = v
         if s: st.session_state.selected_asset = s
@@ -241,7 +228,7 @@ with st.sidebar:
             set_view('detail', asset['sym'])
 
     st.markdown("---")
-    st.info("Status: V24 Stable")
+    st.info("Status: V25 Stable")
 
 # --- HLAVNÍ OBSAH ---
 placeholder = st.empty()
@@ -249,7 +236,7 @@ placeholder = st.empty()
 while True:
     with placeholder.container():
         
-        # === ZOBRAZENÍ: DASHBOARD ===
+        # === DASHBOARD ===
         if st.session_state.view == 'dashboard':
             st.title("💸 DASHBOARD (PŘEHLED)")
             cols = st.columns(2)
@@ -305,17 +292,16 @@ while True:
                         else:
                             st.warning(f"Načítám {asset['name']}...")
 
-        # === ZOBRAZENÍ: DETAIL ===
+        # === DETAIL ===
         elif st.session_state.view == 'detail':
-            # Získání info o vybraném aktivu
             sym = st.session_state.selected_asset
             asset_info = next((a for a in assets if a['sym'] == sym), None)
             
             if asset_info:
                 st.title(f"🔎 DETAIL: {asset_info['name']}")
                 
-                # Tlačítko zpět přímo v UI
-                if st.button("⬅️ ZPĚT NA PŘEHLED"):
+                # OPRAVA: Unikátní key pro tlačítko v loopu
+                if st.button("⬅️ ZPĚT NA PŘEHLED", key="back_btn"):
                     set_view('dashboard')
                     st.rerun()
 
@@ -350,7 +336,7 @@ while True:
                         with c_metrics:
                             st.markdown('<div class="detail-metric-box">', unsafe_allow_html=True)
                             st.markdown(f'<div class="metric-label">RSI HODNOTA</div><div class="metric-val">{row["RSI"]:.1f}</div>', unsafe_allow_html=True)
-                            st.markdown("<hr style='border-color: #333'>", unsafe_allow_html=True)
+                            st.markdown("<hr style='border-color: #333; margin: 10px 0;'>", unsafe_allow_html=True)
                             st.markdown(f'<div class="metric-label">MACD SÍLA</div><div class="metric-val">{row["MACD"]:.4f}</div>', unsafe_allow_html=True)
                             st.markdown('</div>', unsafe_allow_html=True)
                         with c_risk:
@@ -358,7 +344,7 @@ while True:
                             else: sl_c, tp_c = "#ff4444", "#00e676"
                             st.markdown('<div class="detail-metric-box">', unsafe_allow_html=True)
                             st.markdown(f'<div class="metric-label">STOP LOSS</div><div class="metric-val" style="color:{sl_c}">{sl:.2f}</div>', unsafe_allow_html=True)
-                            st.markdown("<hr style='border-color: #333'>", unsafe_allow_html=True)
+                            st.markdown("<hr style='border-color: #333; margin: 10px 0;'>", unsafe_allow_html=True)
                             st.markdown(f'<div class="metric-label">TAKE PROFIT</div><div class="metric-val" style="color:{tp_c}">{tp:.2f}</div>', unsafe_allow_html=True)
                             st.markdown('</div>', unsafe_allow_html=True)
                         with c_gauge:
@@ -367,9 +353,7 @@ while True:
 
         st.caption(f"Last update: {datetime.now().strftime('%H:%M:%S')}")
     
-    # Check pro interakci (aby se refreshnul dashboard)
     if st.session_state.view == 'dashboard':
         time.sleep(15)
     else:
-        # V detailu refreshujeme rychleji nebo čekáme na interakci
         time.sleep(5)
