@@ -8,9 +8,9 @@ from datetime import datetime
 
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="Sniper Bot V20", page_icon="📐", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Sniper Bot V21", page_icon="📐", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. CSS (FIXED HEIGHT FOR GRID) ---
+# --- 2. CSS (MARGIN FIX) ---
 st.markdown("""
     <style>
     /* Globální reset */
@@ -49,19 +49,22 @@ st.markdown("""
     .ai-bar-bg { width: 100%; height: 6px; background-color: #222; border-radius: 3px; margin-top: 5px; overflow: hidden; }
     .ai-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease-in-out; }
 
-    /* === SPÁNEK MODE (FIXED HEIGHT) === */
-    /* Toto zajistí, že zavřená karta je stejně vysoká jako otevřená */
+    /* === SPÁNEK MODE (MARGIN FIX) === */
     .sleep-overlay {
-        height: 470px; /* Pevná výška odpovídající Live kartě */
+        height: 470px;
         display: flex;
         flex-direction: column;
-        justify-content: center; /* Vycentruje obsah vertikálně */
+        justify-content: center;
         align-items: center;
         background: rgba(20, 20, 20, 0.6);
         border-radius: 10px;
         border: 1px dashed #333;
         backdrop-filter: blur(4px);
+        
+        /* TADY JE TA OPRAVA: */
         margin-top: 20px;
+        margin-bottom: 20px; /* Odstup dole */
+        
         box-sizing: border-box;
     }
     .sleep-emoji { font-size: 80px; opacity: 0.8; animation: pulse 3s infinite; margin-bottom: 20px; }
@@ -218,7 +221,7 @@ def create_chart(df, color):
     return fig
 
 # --- 7. MAIN APP ---
-st.title("💸 SNIPER V20 (PERFECT GRID)")
+st.title("💸 SNIPER V21 (FINAL POLISH)")
 placeholder = st.empty()
 
 while True:
@@ -265,7 +268,7 @@ while True:
                                 </div>
                             """, unsafe_allow_html=True)
                             
-                            # 2. SPACÍ PŘEKRYV (FIXNÍ VÝŠKA 470px = Vyplní celý frame)
+                            # 2. SPACÍ PŘEKRYV
                             st.markdown(f"""
                                 <div class="sleep-overlay">
                                     <div class="sleep-emoji">😴</div>
