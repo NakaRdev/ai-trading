@@ -8,103 +8,46 @@ from datetime import datetime
 
 # --- 1. CONFIG ---
 warnings.filterwarnings("ignore")
-st.set_page_config(page_title="Sniper Bot V17", page_icon="🎯", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Sniper Bot V18", page_icon="💸", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. CSS (SYMETRICKÝ MARGIN FIX) ---
+# --- 2. CSS ---
 st.markdown("""
     <style>
     /* Globální reset */
     .stApp { background-color: #050505; font-family: 'Helvetica Neue', sans-serif; }
     .block-container { padding-top: 1rem; padding-bottom: 2rem; }
     
-    /* === HLAVIČKA KARTY === */
-    .header-flex {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 10px;
-    }
-    
+    /* Hlavička */
+    .header-flex { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
     .symbol-title { font-size: 28px; font-weight: 900; color: #fff; line-height: 1; }
     .symbol-desc { font-size: 14px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
-    
     .price-box { text-align: right; }
     .price-main { font-size: 38px; font-weight: 700; color: #fff; font-family: monospace; line-height: 1; text-shadow: 0 0 10px rgba(255,255,255,0.1); }
     .price-change { font-size: 16px; font-weight: bold; margin-top: 5px; text-align: right; }
     .change-up { color: #00e676; }
     .change-down { color: #ff4444; }
     
-    /* === SIGNÁL === */
-    .signal-box {
-        text-align: center;
-        padding: 12px;
-        border-radius: 8px;
-        font-weight: 900;
-        font-size: 18px;
-        text-transform: uppercase;
-        margin: 15px 0;
-        color: #000;
-        letter-spacing: 1px;
-    }
+    /* Signál */
+    .signal-box { text-align: center; padding: 12px; border-radius: 8px; font-weight: 900; font-size: 18px; text-transform: uppercase; margin: 15px 0; color: #000; letter-spacing: 1px; }
     
-    /* === RISK MANAGEMENT === */
-    .risk-wrapper {
-        display: flex;
-        justify-content: space-between;
-        background-color: #151515;
-        border: 1px solid #333;
-        border-radius: 8px;
-        padding: 15px;
-        margin-top: 15px;
-        width: 100%; 
-        box-sizing: border-box !important; 
-    }
-    
+    /* Risk Management */
+    .risk-wrapper { display: flex; justify-content: space-between; background-color: #151515; border: 1px solid #333; border-radius: 8px; padding: 15px; margin-top: 15px; width: 100%; box-sizing: border-box !important; }
     .risk-col { display: flex; flex-direction: column; }
     .risk-label { font-size: 11px; color: #666; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
     .risk-val { font-size: 22px; font-weight: bold; font-family: monospace; }
     
-    /* === AI ACCURACY (OPRAVENO: SYMETRICKÝ PADDING) === */
-    .ai-container {
-        margin-top: 15px;
-        text-align: center;
-        
-        /* ZDE JE OPRAVA - STEJNÉ NAHOŘE I DOLE */
-        padding-top: 15px;
-        padding-bottom: 15px;
-        
-        border-top: 1px solid #222;
+    /* AI Accuracy (SYMETRICKÉ) */
+    .ai-container { 
+        margin-top: 15px; 
+        text-align: center; 
+        padding-top: 15px;    /* Stejné nahoře */
+        padding-bottom: 15px; /* Stejné dole */
+        border-top: 1px solid #222; 
     }
-    
-    .ai-label {
-        font-size: 11px;
-        color: #666;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        margin-bottom: 5px;
-    }
-    
-    .ai-score {
-        font-size: 16px;
-        font-weight: 900;
-        color: #fff;
-    }
-    
-    .ai-bar-bg {
-        width: 100%;
-        height: 6px;
-        background-color: #222;
-        border-radius: 3px;
-        margin-top: 5px;
-        overflow: hidden;
-    }
-    
-    .ai-bar-fill {
-        height: 100%;
-        border-radius: 3px;
-        transition: width 1s ease-in-out;
-    }
+    .ai-label { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 5px; }
+    .ai-score { font-size: 16px; font-weight: 900; color: #fff; }
+    .ai-bar-bg { width: 100%; height: 6px; background-color: #222; border-radius: 3px; margin-top: 5px; overflow: hidden; }
+    .ai-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease-in-out; }
 
     header {visibility: hidden;}
     </style>
@@ -157,52 +100,70 @@ def get_data(symbol):
     except:
         return None
 
-# --- 5. LOGIKA ANALÝZY (AGRESIVNÍ V6) ---
-def analyze_market_aggressive(df):
+# --- 5. LOGIKA "BALANCED PROFIT" ---
+def analyze_market_balanced(df, symbol):
     row = df.iloc[-1]
     price = row['Close']
     atr = row['ATR']
     
-    last_time = row.name
+    # --- LOGIKA PRO VÍKEND (FIX) ---
     now = pd.Timestamp.now(tz='Europe/Prague')
-    diff = (now - last_time).total_seconds() / 60
-    # Krypto běží pořád, ostatní mají víkend
-    is_live = diff < 120 or now.weekday() >= 5 
+    is_weekend = now.weekday() >= 5 # 5=Sobota, 6=Neděle
+    is_crypto = "BTC" in symbol
+    
+    # Pokud je víkend a NENÍ to krypto -> trh je zavřený
+    if is_weekend and not is_crypto:
+        is_live = False
+    else:
+        # Jinak kontrolujeme stáří dat (pro případ výpadku)
+        last_time = row.name
+        diff = (now - last_time).total_seconds() / 60
+        is_live = diff < 120
 
     score = 50.0
     
-    # Trend
-    if price > row['EMA_200']: score += 10
+    # 1. TREND (EMA 200) - Základ (20 bodů)
+    trend_up = price > row['EMA_200']
+    if trend_up: score += 10
     else: score -= 10
 
-    # RSI (V6 Agresivní styl)
-    rsi = row['RSI']
-    if rsi > 65: score -= 15
-    elif rsi < 35: score += 15
-    else:
-        if price > row['EMA_200'] and rsi < 50: score += 5
-        if price < row['EMA_200'] and rsi > 50: score -= 5
-
-    # MACD (Momentum Drive)
+    # 2. MACD (Momentum) - Důležité pro agresivitu (20 bodů)
     if row['MACD'] > row['Signal_Line']: score += 10
     else: score -= 10
 
+    # 3. RSI (Chytrý filtr) - Zabrání nákupu na vrcholu (30 bodů)
+    rsi = row['RSI']
+    if trend_up:
+        if rsi < 50: score += 15    # Dip v trendu = Super nákup
+        elif rsi > 70: score -= 15  # Překoupeno = Nekupuj
+    else:
+        if rsi > 50: score -= 15    # Rally v downtrendu = Prodej
+        elif rsi < 30: score += 15  # Přeprodáno = Neprodávej
+
+    # 4. Bollinger Bands (Potvrzení) - (20 bodů)
+    if price <= row['BB_Lower']: score += 10
+    if price >= row['BB_Upper']: score -= 10
+
     score = int(max(0, min(100, score)))
 
-    # Hranice
-    if score >= 55:
+    # --- ROZHODOVÁNÍ (ZLATÁ STŘEDNÍ CESTA) ---
+    # Buy > 60 (Agresivní ale ne hloupé)
+    # Sell < 40
+    
+    if score >= 60:
         action = "LONG / KOUPIT 🚀"
         color = "#00e676"
-    elif score <= 45:
+    elif score <= 40:
         action = "SHORT / PRODAT 📉"
         color = "#ff4444" 
     else: 
         action = "WAIT / ČEKAT ✋"
         color = "#CCCCCC"
 
-    # Pokud trh spí, přidáme info
     if not is_live:
         action += " (ZAVŘENO 💤)"
+        # Pokud trh spí, zešedíme barvy signálu
+        color = "#CCCCCC"
 
     sl = price - (2*atr) if score > 50 else price + (2*atr)
     tp = price + (3*atr) if score > 50 else price - (3*atr)
@@ -246,19 +207,20 @@ def create_chart(df, color):
     return fig
 
 # --- 7. MAIN APP ---
-st.title("🎯 SNIPER TRADING V17")
+st.title("💸 SNIPER V18 (BALANCED)")
 placeholder = st.empty()
 
 while True:
     with placeholder.container():
         cols = st.columns(2)
         
+        # ZMĚNA: CL=F (Ropa) nahrazena BTC-USD (Bitcoin)
         assets = [
             {"sym": "EURUSD=X", "name": "EUR/USD", "desc": "Forex"},
             {"sym": "GBPUSD=X", "name": "GBP/USD", "desc": "Forex"},
             {"sym": "JPY=X", "name": "USD/JPY", "desc": "Forex"},
             {"sym": "GC=F", "name": "GOLD", "desc": "Zlato"},
-            {"sym": "CL=F", "name": "OIL", "desc": "Ropa"},
+            {"sym": "BTC-USD", "name": "BITCOIN", "desc": "Krypto"},
             {"sym": "ES=F", "name": "S&P 500", "desc": "Futures"},
         ]
 
@@ -268,7 +230,8 @@ while True:
                     df = get_data(asset['sym'])
                     
                     if df is not None:
-                        score, action, color, sl, tp, is_live = analyze_market_aggressive(df)
+                        # Voláme vyváženou logiku s detekcí víkendu
+                        score, action, color, sl, tp, is_live = analyze_market_balanced(df, asset['sym'])
                         
                         price = df.iloc[-1]['Close']
                         pct_change = df.iloc[-1]['Pct_Change']
@@ -277,15 +240,14 @@ while True:
                         arrow = "▲" if pct_change >= 0 else "▼"
                         change_str = f"{arrow} {abs(pct_change):.2f}%"
 
-                        # Barvy pro SL/TP
-                        if "WAIT" in action:
+                        if "WAIT" in action or not is_live:
                             sl_color = "#666"
                             tp_color = "#666"
                         else:
                             sl_color = "#ff4444"
                             tp_color = "#00e676"
 
-                        # 1. HLAVIČKA
+                        # HLAVIČKA
                         st.markdown(f"""
                             <div class="header-flex">
                                 <div>
@@ -299,19 +261,19 @@ while True:
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # 2. SIGNÁL
+                        # SIGNÁL
                         st.markdown(f"""
                             <div class="signal-box" style="background-color: {color}; box-shadow: 0 0 25px {hex_to_rgba(color, 0.4)};">
                                 {action}
                             </div>
                         """, unsafe_allow_html=True)
 
-                        # 3. GRAF
+                        # GRAF
                         chart_key = f"chart_{asset['sym']}_{int(time.time())}"
                         fig = create_chart(df, color)
                         st.plotly_chart(fig, config={'displayModeBar': False}, key=chart_key, use_container_width=True)
 
-                        # 4. RISK MANAGEMENT
+                        # RISK MANAGEMENT
                         st.markdown(f"""
                             <div class="risk-wrapper">
                                 <div class="risk-col">
@@ -325,10 +287,10 @@ while True:
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # 5. AGRESIVITA (AI)
+                        # AI PŘESNOST
                         st.markdown(f"""
                             <div class="ai-container">
-                                <div class="ai-label">AGRESIVITA SIGNÁLU</div>
+                                <div class="ai-label">AI PŘESNOST</div>
                                 <div class="ai-score">{score}%</div>
                                 <div class="ai-bar-bg">
                                     <div class="ai-bar-fill" style="width: {score}%; background-color: {color}; box-shadow: 0 0 10px {color};"></div>
