@@ -54,7 +54,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 3. DATA ENGINE ---
-@st.cache_data(ttl=45, show_spinner=False) # Cache 45 sekund
+@st.cache_data(ttl=45, show_spinner=False)
 def get_data(symbol):
     try:
         ticker = yf.Ticker(symbol)
@@ -135,12 +135,20 @@ def analyze_market(df):
 
     return score, action, reasons, sl, tp, is_live
 
-# --- 5. VYKRESLENÍ GRAFU (Plotly) ---
+# --- 5. VYKRESLENÍ GRAFU (OPRAVENO) ---
 def create_chart(df, score):
     # Barva grafu podle signálu
     if score >= 55: main_color = '#00ff41' # Zelená
     elif score <= 45: main_color = '#ff2b2b' # Červená
     else: main_color = '#888888' # Šedá
+
+    # OPRAVA: Převedeme HEX barvu na RGBA pro průhlednost
+    h = main_color.lstrip('#')
+    try:
+        rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+        fill_color_rgba = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.1)" # 0.1 je průhlednost
+    except:
+        fill_color_rgba = "rgba(100, 100, 100, 0.1)" # Záložní barva
 
     subset = df.tail(40) # Posledních 40 svíček
     
@@ -151,8 +159,8 @@ def create_chart(df, score):
         x=subset.index, y=subset['Close'],
         mode='lines',
         line=dict(color=main_color, width=2),
-        fill='tozeroy', # Vyplní oblast pod grafem
-        fillcolor=f"rgba{main_color[1:] if main_color.startswith('#') else '(100,100,100'}, 0.1)", # Průhledná výplň
+        fill='tozeroy', 
+        fillcolor=fill_color_rgba, # Zde byla chyba, teď je to OK
         name='Cena'
     ))
 
